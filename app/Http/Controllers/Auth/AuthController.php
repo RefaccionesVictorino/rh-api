@@ -11,6 +11,12 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    /** Vigencia del token cuando el usuario NO marca "Mantener sesión activa". */
+    private const SESSION_HOURS = 12;
+
+    /** Vigencia del token cuando el usuario marca "Mantener sesión activa". */
+    private const REMEMBER_DAYS = 30;
+
     /**
      * Inicia sesión y devuelve un token de Sanctum.
      */
@@ -19,6 +25,7 @@ class AuthController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
+            'remember' => ['nullable', 'boolean'],
             'device_name' => ['nullable', 'string', 'max:100'],
         ]);
 
@@ -30,10 +37,18 @@ class AuthController extends Controller
             ]);
         }
 
-        $token = $user->createToken($credentials['device_name'] ?? 'api')->plainTextToken;
+        $remember = (bool) ($credentials['remember'] ?? false);
+        $expiresAt = $remember
+            ? now()->addDays(self::REMEMBER_DAYS)
+            : now()->addHours(self::SESSION_HOURS);
+
+        $token = $user
+            ->createToken($credentials['device_name'] ?? 'api', ['*'], $expiresAt)
+            ->plainTextToken;
 
         return response()->json([
             'token' => $token,
+            'expires_at' => $expiresAt->toIso8601String(),
             'user' => $this->userPayload($user),
         ]);
     }
