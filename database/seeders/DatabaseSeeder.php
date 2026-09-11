@@ -17,5 +17,8 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RolesAndPermissionsSeeder::class,
         ]);
+
+        // Datos de prueba: el seeder se omite solo fuera de local.
+        $this->call(EmployeesTableSeeder::class);
     }
 }
