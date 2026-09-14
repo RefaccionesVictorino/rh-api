@@ -31,6 +31,11 @@ class EmployeeResource extends JsonResource
             'work_phone' => $this->work_phone,
             'municipality' => $this->municipality,
             'hire_date' => $this->hire_date?->toDateString(),
+            // Nulo cuando el empleado no tiene turno vigente hoy.
+            'current_shift' => $this->whenLoaded(
+                'currentShiftAssignment',
+                fn () => EmployeeShiftResource::make($this->currentShiftAssignment),
+            ),
         ];
     }
 }

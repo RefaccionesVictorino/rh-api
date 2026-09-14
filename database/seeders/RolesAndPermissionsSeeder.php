@@ -21,6 +21,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'empleados' => ['ver', 'crear', 'editar', 'eliminar'],
         'areas' => ['ver', 'crear', 'editar', 'eliminar'],
         'subareas' => ['ver', 'crear', 'editar', 'eliminar'],
+        'turnos' => ['ver', 'crear', 'editar', 'eliminar', 'asignar'],
+        'checador' => ['ver', 'administrar'],
     ];
 
     public function run(): void
@@ -45,6 +47,8 @@ class RolesAndPermissionsSeeder extends Seeder
             'empleados.ver', 'empleados.crear', 'empleados.editar',
             'areas.ver', 'areas.crear', 'areas.editar',
             'subareas.ver', 'subareas.crear', 'subareas.editar',
+            'turnos.ver', 'turnos.crear', 'turnos.editar', 'turnos.asignar',
+            'checador.ver', 'checador.administrar',
         ]);
 
         Role::firstOrCreate(['name' => 'empleado', 'guard_name' => 'web']);

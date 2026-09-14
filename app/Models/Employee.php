@@ -4,13 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends Model
 {
-    use SoftDeletes;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'name',
@@ -58,6 +61,22 @@ class Employee extends Model
     public function subDepartment(): BelongsTo
     {
         return $this->belongsTo(SubDepartment::class);
+    }
+
+    /** Historial completo de turnos asignados. */
+    public function shiftAssignments(): HasMany
+    {
+        return $this->hasMany(EmployeeShift::class);
+    }
+
+    /**
+     * Asignación de turno vigente hoy. Es hasOne y no una columna en
+     * employees para que el historial y el turno actual salgan de la misma
+     * fuente y no puedan contradecirse.
+     */
+    public function currentShiftAssignment(): HasOne
+    {
+        return $this->hasOne(EmployeeShift::class)->activeOn(today());
     }
 
     /**

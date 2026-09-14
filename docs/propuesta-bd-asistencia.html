@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Propuesta de base de datos: asistencia y vacaciones</title>
+<style>
+  @page { size: A4 landscape; margin: 12mm 14mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 11px; color: #1f2937; line-height: 1.45; }
+  h1 { font-size: 26px; margin: 0 0 4px; color: #111827; }
+  h2 { font-size: 17px; margin: 0 0 10px; color: #111827; border-bottom: 2px solid #111827; padding-bottom: 4px; }
+  h3 { font-size: 13px; margin: 0 0 2px; font-family: Consolas, "Courier New", monospace; }
+  p { margin: 0 0 8px; }
+  .page { break-after: page; page-break-after: always; }
+  .page:last-child { break-after: auto; page-break-after: auto; }
+  .subtitle { font-size: 13px; color: #4b5563; margin-bottom: 18px; }
+  .meta { font-size: 11px; color: #6b7280; margin-bottom: 24px; }
+  .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .blocks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 0 16px; }
+  .block { border: 1px solid #d1d5db; border-top: 4px solid; border-radius: 4px; padding: 8px 10px; }
+  .block h4 { margin: 0 0 4px; font-size: 12px; }
+  .block ul { margin: 0; padding-left: 16px; }
+  .b-horario { border-top-color: #2563eb; }
+  .b-asistencia { border-top-color: #059669; }
+  .b-ausencia { border-top-color: #d97706; }
+  .b-org { border-top-color: #6b7280; }
+  ol, ul { margin: 0 0 8px; padding-left: 18px; }
+  li { margin-bottom: 3px; }
+
+  /* diagrama */
+  .diagram-wrap { width: 100%; }
+  svg { width: 100%; height: auto; display: block; }
+  .legend { display: flex; gap: 18px; align-items: center; font-size: 10px; color: #4b5563; margin-top: 4px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+
+  /* diccionario */
+  .dict-grid { column-count: 2; column-gap: 20px; }
+  .card { border: 1px solid #d1d5db; border-radius: 4px; break-inside: avoid; page-break-inside: avoid; margin-bottom: 10px; display: block; }
+  .card header { padding: 5px 8px; border-left: 4px solid; background: #f9fafb; display: flex; justify-content: space-between; align-items: baseline; }
+  .card header small { font-size: 9px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+  .card .purpose { padding: 5px 8px; font-size: 10.5px; color: #374151; border-bottom: 1px solid #e5e7eb; }
+  .card table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .card th { text-align: left; background: #f3f4f6; padding: 3px 6px; font-weight: 600; color: #4b5563; }
+  .card td { padding: 2.5px 6px; border-top: 1px solid #f1f5f9; vertical-align: top; }
+  .card td.n { font-family: Consolas, "Courier New", monospace; white-space: nowrap; }
+  .card td.t { color: #6b7280; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 8px; padding: 0 3px; border-radius: 2px; margin-left: 3px; vertical-align: middle; }
+  .tag.pk { background: #111827; color: #fff; }
+  .tag.fk { background: #dbeafe; color: #1e40af; }
+  .tag.new { background: #fef3c7; color: #92400e; }
+  .h-horario header { border-left-color: #2563eb; }
+  .h-asistencia header { border-left-color: #059669; }
+  .h-ausencia header { border-left-color: #d97706; }
+  .h-org header { border-left-color: #6b7280; }
+  .note { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; padding: 8px 10px; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<!-- ======================= PÁGINA 1: PORTADA Y ENFOQUE ======================= -->
+<section class="page">
+  <h1>Propuesta de base de datos: asistencia y vacaciones</h1>
+  <div class="subtitle">Sistema de Recursos Humanos, Refacciones Victorino</div>
+  <div class="meta">Versión 1 · 14 de septiembre de 2026 · Base: tablas existentes de empleados, áreas, sub áreas y usuarios</div>
+
+  <div class="cols2">
+    <div>
+      <h2>Objetivo</h2>
+      <p>Llevar control de vacaciones y de checadas de entrada y salida, para obtener asistencia, retardos, faltas y saldos de vacaciones por empleado, considerando que hay empleados con turnos y horarios distintos, incluyendo turnos que cruzan medianoche y turnos rotativos.</p>
+
+      <h2>Dos decisiones que sostienen el diseño</h2>
+      <p><b>Checadas crudas y resumen diario son tablas distintas.</b> Las checadas (<i>attendance_punches</i>) son evidencia y nunca se editan. El resumen del día (<i>attendance_days</i>) se calcula a partir de ellas y se recalcula cuando llega una justificación, un permiso o una vacación aprobada. Los reportes de retardos y faltas consumen solo el resumen, por lo que son rápidos y consistentes.</p>
+      <p><b>El turno se asigna con vigencia, no como columna fija del empleado.</b> La tabla <i>employee_shifts</i> guarda desde y hasta cuándo aplica cada turno. Un reporte de marzo usa el turno que el empleado tenía en marzo, aunque hoy tenga otro. Esto también cubre turnos rotativos sin tablas adicionales.</p>
+    </div>
+    <div>
+      <h2>Bloques del modelo</h2>
+      <div class="blocks" style="grid-template-columns: 1fr;">
+        <div class="block b-horario">
+          <h4>Horarios: qué se espera de cada empleado cada día</h4>
+          <ul>
+            <li><b>shifts</b> y <b>shift_days</b>: catálogo de turnos con horario por día de la semana y tolerancias.</li>
+            <li><b>employee_shifts</b>: asignación de turno con vigencia (historial).</li>
+            <li><b>schedule_overrides</b>: excepciones de un solo día (cambio de turno, cubrir a alguien, descanso movido).</li>
+            <li><b>holidays</b>: días festivos obligatorios y de la empresa.</li>
+          </ul>
+        </div>
+        <div class="block b-asistencia">
+          <h4>Asistencia: qué pasó realmente</h4>
+          <ul>
+            <li><b>attendance_punches</b>: checadas crudas, inmutables, con origen (biométrico, app, web, manual).</li>
+            <li><b>attendance_days</b>: resumen calculado por empleado y fecha: estatus, minutos de retardo, justificación, bloqueo por nómina.</li>
+          </ul>
+        </div>
+        <div class="block b-ausencia">
+          <h4>Ausencias: vacaciones, permisos e incapacidades</h4>
+          <ul>
+            <li><b>vacation_entitlements</b>, <b>vacation_periods</b>: días por antigüedad y periodo anual con saldo.</li>
+            <li><b>vacation_requests</b>, <b>vacation_request_days</b>: solicitud con flujo de aprobación y días concretos que consume.</li>
+            <li><b>leave_types</b>, <b>leaves</b>: permisos con y sin goce, incapacidades IMSS, faltas justificadas.</li>
+          </ul>
+        </div>
+        <div class="block b-org">
+          <h4>Existente (se reutiliza)</h4>
+          <ul>
+            <li><b>employees</b>, <b>departments</b>, <b>sub_departments</b>: el responsable de la sub área es quien aprueba solicitudes.</li>
+            <li><b>users</b>: se agrega <i>employee_id</i> para que el empleado pueda checar y solicitar desde su cuenta.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= PÁGINA 2: DIAGRAMA ======================= -->
+<section class="page">
+  <h2>Diagrama entidad-relación</h2>
+  <div class="diagram-wrap" id="diagram"></div>
+  <div class="legend">
+    <span><i style="background:#6b7280"></i> Existente</span>
+    <span><i style="background:#2563eb"></i> Horarios</span>
+    <span><i style="background:#059669"></i> Asistencia</span>
+    <span><i style="background:#d97706"></i> Ausencias y vacaciones</span>
+    <span>Notación pata de gallo: | uno, ⟨ muchos. Línea punteada: consulta o cálculo, sin llave foránea.</span>
+    <span>No dibujadas por claridad: attendance_days.shift_id → shifts, attendance_days.leave_id → leaves, departments/sub_departments.manager_id → employees, y las columnas de auditoría (created_by, approved_by, justified_by, assigned_by) → users.</span>
+  </div>
+</section>
+
+<!-- ======================= PÁGINAS 3+: DICCIONARIO ======================= -->
+<section class="page">
+  <h2>Diccionario de datos (1 de 3): horarios y organización</h2>
+  <div class="dict-grid" id="dict-1"></div>
+</section>
+<section class="page">
+  <h2>Diccionario de datos (2 de 3): asistencia</h2>
+  <div class="dict-grid" id="dict-2"></div>
+</section>
+<section class="page">
+  <h2>Diccionario de datos (3 de 3): vacaciones, permisos e incapacidades</h2>
+  <div class="dict-grid" id="dict-3"></div>
+</section>
+
+<!-- ======================= ÚLTIMA PÁGINA: REGLAS ======================= -->
+<section class="page">
+  <div class="cols2">
+    <div>
+      <h2>Cómo se resuelve un día</h2>
+      <p>Un comando programado corre cada noche y genera o recalcula el renglón de <i>attendance_days</i> de cada empleado para la fecha. También se recalcula bajo demanda cuando se aprueba una vacación, un permiso o una justificación. La prioridad es:</p>
+      <ol>
+        <li><b>Vacación o permiso aprobado</b> para esa fecha: el estatus es <i>vacation</i>, <i>leave</i> o <i>sick_leave</i> y no se revisan checadas.</li>
+        <li><b>Día festivo</b> en <i>holidays</i>: estatus <i>holiday</i>.</li>
+        <li><b>Horario esperado</b>: la excepción del día en <i>schedule_overrides</i> si existe; si no, el renglón de <i>shift_days</i> del turno vigente en <i>employee_shifts</i>. Si es descanso, estatus <i>rest_day</i>.</li>
+        <li><b>Checadas</b> contra el horario esperado. Si la salida es menor a la entrada, el turno cruza medianoche y la salida se busca en el día siguiente.
+          <ul>
+            <li>Sin entrada: <i>absent</i>.</li>
+            <li>Entrada dentro de la tolerancia: <i>present</i>.</li>
+            <li>Entrada después de la tolerancia: <i>late</i>, guardando <i>late_minutes</i>.</li>
+            <li>Entrada después del umbral de falta (<i>absence_after_minutes</i>): <i>absent</i>.</li>
+          </ul>
+        </li>
+        <li><b>Justificación de RH</b>: cambia el estatus a <i>justified_absence</i> y guarda quién y cuándo. Las checadas no se tocan.</li>
+        <li><b>Bloqueo</b>: si <i>is_locked</i> está activo (periodo ya pagado en nómina), el renglón no se recalcula.</li>
+      </ol>
+
+      <h2>Saldo de vacaciones</h2>
+      <p>En cada aniversario de <i>hire_date</i> se crea un <i>vacation_period</i> con los días de <i>vacation_entitlements</i> según los años de servicio. El saldo se calcula como <b>entitled_days + adjustment_days − taken_days</b>. Al aprobar una solicitud se generan sus <i>vacation_request_days</i>, cada uno cargado al periodo que corresponde, y se incrementa <i>taken_days</i>. Al cancelar, se revierte.</p>
+    </div>
+    <div>
+      <h2>Decisiones pendientes que afectan el diseño</h2>
+      <ul>
+        <li><b>Retardos acumulados.</b> ¿Cuántos retardos en un periodo equivalen a una falta? Si aplica, conviene una configuración global y un estatus derivado en reportes, no en la tabla.</li>
+        <li><b>Días naturales o hábiles.</b> ¿Las vacaciones se solicitan en días naturales o solo hábiles? La tabla de días materializados soporta ambos, pero el cálculo de <i>requested_days</i> cambia y define si sábados, descansos y festivos consumen saldo.</li>
+        <li><b>Empleados sin sub área.</b> Hoy <i>sub_department_id</i> es nullable. Si un empleado sin sub área puede checar, no tiene responsable que apruebe sus solicitudes; habría que definir un aprobador por defecto (RH).</li>
+        <li><b>Vencimiento de vacaciones.</b> Definir qué pasa con los días no tomados al llegar <i>expires_on</i>: se pierden, se pagan o se extienden con autorización.</li>
+        <li><b>Origen de las checadas.</b> Si hay biométrico, definir cómo llegan las checadas (importación periódica o integración directa) y si la app móvil valida ubicación.</li>
+        <li><b>Turnos rotativos frecuentes.</b> Si la rotación es semanal y masiva, conviene una tabla de patrón de rotación que genere <i>employee_shifts</i> automáticamente. No se incluye en esta versión.</li>
+      </ul>
+
+      <h2>Índices y restricciones clave</h2>
+      <ul>
+        <li><i>attendance_days</i>: único (employee_id, date); índice (date, status) para reportes por día.</li>
+        <li><i>attendance_punches</i>: índice (employee_id, punched_at); sin updates ni deletes desde la aplicación.</li>
+        <li><i>employee_shifts</i>: índice (employee_id, starts_on); la aplicación garantiza que no se traslapen vigencias.</li>
+        <li><i>schedule_overrides</i>: único (employee_id, date).</li>
+        <li><i>vacation_periods</i>: único (employee_id, year_number). <i>vacation_request_days</i>: único (vacation_request_id, date).</li>
+        <li><i>shift_days</i>: único (shift_id, weekday). <i>holidays</i>: único (date).</li>
+        <li><i>users.employee_id</i>: único y nullable; un empleado tiene a lo más una cuenta.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<script>
+// ---------- Definición única de tablas (alimenta diagrama y diccionario) ----------
+const PK = 'PK', FK = 'FK';
+const T = [
+  // --- existentes ---
+  { name: 'departments', block: 'org', existing: true, x: 40, y: 40, page: 1,
+    purpose: 'Existente. Área de la empresa. Se muestra por contexto; no cambia.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'name', t: 'varchar', d: 'Nombre del área.', diag: true },
+      { n: 'code', t: 'varchar(20)', d: 'Código corto opcional.' },
+      { n: 'manager_id', t: 'bigint', d: 'Responsable del área (employees).', fk: 'employees', diag: true },
+      { n: 'is_active', t: 'boolean', d: 'Activa o no.' },
+    ] },
+  { name: 'sub_departments', block: 'org', existing: true, x: 360, y: 40, page: 1,
+    purpose: 'Existente. Sub área anidable. Su responsable (manager_id) es el aprobador natural de vacaciones y permisos de sus miembros.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'department_id', t: 'bigint', d: 'Área a la que pertenece.', fk: 'departments', diag: true },
+      { n: 'parent_id', t: 'bigint', d: 'Sub área padre, si está anidada.', fk: 'sub_departments', diag: true },
+      { n: 'name', t: 'varchar', d: 'Nombre.', diag: true },
+      { n: 'manager_id', t: 'bigint', d: 'Responsable; aprueba solicitudes.', fk: 'employees', diag: true },
+    ] },
+  { name: 'users', block: 'org', existing: true, x: 680, y: 40, page: 1,
+    purpose: 'Existente. Cuenta de acceso. Se agrega la liga al empleado para autoservicio: checar desde la app y solicitar vacaciones o permisos.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'name', t: 'varchar', d: 'Nombre de usuario.', diag: true },
+      { n: 'email', t: 'varchar', d: 'Correo, único.', diag: true },
+      { n: 'employee_id', t: 'bigint', d: 'Nuevo. Empleado ligado a la cuenta. Nullable y único: las cuentas de RH o sistemas pueden no tener empleado.', fk: 'employees', diag: true, isNew: true },
+    ] },
+  { name: 'employees', block: 'org', existing: true, x: 680, y: 300, page: 1,
+    purpose: 'Existente. Empleado. La fecha de ingreso (hire_date) define los aniversarios que generan periodos vacacionales.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'name', t: 'varchar', d: 'Nombre.', diag: true },
+      { n: 'last_name', t: 'varchar', d: 'Apellido paterno.', diag: true },
+      { n: 'hire_date', t: 'date', d: 'Fecha de ingreso; base de la antigüedad.', diag: true },
+      { n: 'sub_department_id', t: 'bigint', d: 'Sub área a la que pertenece. Nullable.', fk: 'sub_departments', diag: true },
+    ] },
+
+  // --- horarios ---
+  { name: 'shifts', block: 'horario', x: 40, y: 300, page: 1,
+    purpose: 'Catálogo de turnos. La tolerancia vive aquí porque puede variar por turno: no es lo mismo mostrador que almacén nocturno.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'name', t: 'varchar(100)', d: 'Nombre: "Matutino", "Nocturno almacén".', diag: true },
+      { n: 'code', t: 'varchar(20)', d: 'Código corto opcional.', diag: true },
+      { n: 'tolerance_minutes', t: 'smallint', d: 'Minutos después de la hora de entrada a partir de los cuales cuenta retardo.', diag: true },
+      { n: 'absence_after_minutes', t: 'smallint', d: 'Minutos después de la hora de entrada a partir de los cuales cuenta falta.', diag: true },
+      { n: 'is_active', t: 'boolean', d: 'Turnos inactivos no se pueden asignar pero conservan historial.', diag: true },
+      { n: 'deleted_at, timestamps', t: '', d: 'Soft delete y auditoría estándar.' },
+    ] },
+  { name: 'shift_days', block: 'horario', x: 40, y: 560, page: 1,
+    purpose: 'Horario del turno por día de la semana. Permite sábado de medio día o descanso entre semana. Si end_time < start_time el turno cruza medianoche.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'shift_id', t: 'bigint', d: 'Turno.', fk: 'shifts', diag: true },
+      { n: 'weekday', t: 'tinyint', d: '0 domingo … 6 sábado. Único junto con shift_id.', diag: true },
+      { n: 'is_rest_day', t: 'boolean', d: 'Día de descanso; start/end quedan nulos.', diag: true },
+      { n: 'start_time', t: 'time', d: 'Hora de entrada esperada.', diag: true },
+      { n: 'end_time', t: 'time', d: 'Hora de salida esperada.', diag: true },
+      { n: 'break_minutes', t: 'smallint', d: 'Minutos de comida; se descuentan de worked_minutes.', diag: true },
+    ] },
+  { name: 'employee_shifts', block: 'horario', x: 360, y: 300, page: 1,
+    purpose: 'Asignación de turno con vigencia. El turno vigente es el renglón con starts_on ≤ fecha y ends_on nulo o ≥ fecha. Conserva historial y cubre rotaciones.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'employee_id', t: 'bigint', d: 'Empleado.', fk: 'employees', diag: true },
+      { n: 'shift_id', t: 'bigint', d: 'Turno asignado.', fk: 'shifts', diag: true },
+      { n: 'starts_on', t: 'date', d: 'Desde cuándo aplica.', diag: true },
+      { n: 'ends_on', t: 'date', d: 'Hasta cuándo aplica. Nulo = vigente.', diag: true },
+      { n: 'assigned_by', t: 'bigint', d: 'Usuario que hizo la asignación.', fk: 'users', diag: true },
+      { n: 'timestamps', t: '', d: 'Auditoría estándar.' },
+    ] },
+  { name: 'schedule_overrides', block: 'horario', x: 360, y: 560, page: 1,
+    purpose: 'Excepción de horario para un solo día: cambio de turno, cubrir a un compañero, descanso movido. Tiene prioridad sobre el turno.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'employee_id', t: 'bigint', d: 'Empleado.', fk: 'employees', diag: true },
+      { n: 'date', t: 'date', d: 'Fecha afectada. Única junto con employee_id.', diag: true },
+      { n: 'is_rest_day', t: 'boolean', d: 'Ese día descansa aunque el turno diga lo contrario.', diag: true },
+      { n: 'start_time', t: 'time', d: 'Entrada esperada ese día.', diag: true },
+      { n: 'end_time', t: 'time', d: 'Salida esperada ese día.', diag: true },
+      { n: 'reason', t: 'varchar', d: 'Motivo del cambio.', diag: true },
+      { n: 'created_by', t: 'bigint', d: 'Usuario que registró la excepción.', fk: 'users', diag: true },
+    ] },
+  { name: 'holidays', block: 'horario', x: 40, y: 860, page: 1,
+    purpose: 'Días festivos. Un festivo no cuenta como falta ni consume vacaciones.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'date', t: 'date', d: 'Fecha, única.', diag: true },
+      { n: 'name', t: 'varchar', d: 'Nombre del festivo.', diag: true },
+      { n: 'is_mandatory', t: 'boolean', d: 'Obligatorio por Ley Federal del Trabajo o propio de la empresa.', diag: true },
+    ] },
+
+  // --- asistencia ---
+  { name: 'attendance_punches', block: 'asistencia', x: 360, y: 860, page: 2,
+    purpose: 'Checadas crudas. Inmutables: nunca se editan ni se borran desde la aplicación. Son la evidencia de la que se calcula el resumen diario.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'employee_id', t: 'bigint', d: 'Empleado que checó.', fk: 'employees', diag: true },
+      { n: 'punched_at', t: 'datetime', d: 'Momento exacto de la checada. Índice junto con employee_id.', diag: true },
+      { n: 'type', t: 'enum', d: 'in, out, break_start, break_end. Nullable: un biométrico simple no distingue.', diag: true },
+      { n: 'source', t: 'enum', d: 'biometric, app, web, manual.', diag: true },
+      { n: 'device_id', t: 'varchar', d: 'Identificador del checador, si aplica.', diag: true },
+      { n: 'latitude, longitude', t: 'decimal(10,7)', d: 'Ubicación si la checada viene de la app.' },
+      { n: 'ip_address', t: 'varchar(45)', d: 'IP de origen para checadas web o app.' },
+      { n: 'created_by', t: 'bigint', d: 'Usuario que capturó, solo en checadas manuales de RH.', fk: 'users', diag: true },
+      { n: 'notes', t: 'text', d: 'Justificación de una checada manual.' },
+    ] },
+  { name: 'attendance_days', block: 'asistencia', x: 680, y: 560, page: 2,
+    purpose: 'Resumen calculado por empleado y fecha. Congela el horario esperado para que un cambio posterior de turno no altere la historia. Los reportes leen esta tabla.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'employee_id', t: 'bigint', d: 'Empleado.', fk: 'employees', diag: true },
+      { n: 'date', t: 'date', d: 'Fecha laboral. Única junto con employee_id.', diag: true },
+      { n: 'shift_id', t: 'bigint', d: 'Turno que aplicó ese día (snapshot).', fk: 'shifts', diag: true },
+      { n: 'expected_start', t: 'datetime', d: 'Entrada esperada, ya resuelta (turno o excepción).', diag: true, dl: 'expected_start, expected_end' },
+      { n: 'expected_end', t: 'datetime', d: 'Salida esperada. Si cruza medianoche cae en el día siguiente.' },
+      { n: 'first_in', t: 'datetime', d: 'Primera checada de entrada encontrada.', diag: true, dl: 'first_in, last_out' },
+      { n: 'last_out', t: 'datetime', d: 'Última checada de salida encontrada.' },
+      { n: 'worked_minutes', t: 'smallint', d: 'Minutos trabajados menos comida.', diag: true, dl: 'worked_minutes, late_minutes' },
+      { n: 'late_minutes', t: 'smallint', d: 'Minutos de retardo respecto a expected_start.' },
+      { n: 'status', t: 'enum', d: 'present, late, absent, justified_absence, vacation, leave, sick_leave, rest_day, holiday, pending.', diag: true },
+      { n: 'leave_id', t: 'bigint', d: 'Permiso o incapacidad que cubre el día.', fk: 'leaves', diag: true },
+      { n: 'vacation_request_id', t: 'bigint', d: 'Solicitud de vacaciones que cubre el día.', fk: 'vacation_requests', diag: true },
+      { n: 'is_locked', t: 'boolean', d: 'Cerrado por nómina; no se recalcula.', diag: true },
+      { n: 'justified_by', t: 'bigint', d: 'Usuario de RH que justificó.', fk: 'users', diag: true, dl: 'justified_by, justified_at' },
+      { n: 'justified_at', t: 'datetime', d: 'Cuándo se justificó.' },
+      { n: 'justification_notes', t: 'text', d: 'Motivo de la justificación.' },
+    ] },
+
+  // --- ausencias ---
+  { name: 'vacation_entitlements', block: 'ausencia', x: 1320, y: 300, page: 3,
+    purpose: 'Tabla de días de vacaciones por años de servicio. Configurable en lugar de hardcodeada: la reforma de 2023 cambió la tabla y puede volver a cambiar.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'years_of_service', t: 'tinyint', d: 'Año de servicio cumplido, único.', diag: true },
+      { n: 'days', t: 'tinyint', d: 'Días que corresponden ese año.', diag: true },
+    ] },
+  { name: 'vacation_periods', block: 'ausencia', x: 1000, y: 300, page: 3,
+    purpose: 'Periodo vacacional por año de servicio, generado en cada aniversario de hire_date. Saldo = entitled_days + adjustment_days − taken_days.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'employee_id', t: 'bigint', d: 'Empleado.', fk: 'employees', diag: true },
+      { n: 'year_number', t: 'tinyint', d: 'Año de servicio (1, 2, 3…). Único junto con employee_id.', diag: true },
+      { n: 'starts_on', t: 'date', d: 'Inicio del periodo (aniversario).', diag: true },
+      { n: 'ends_on', t: 'date', d: 'Fin del periodo (siguiente aniversario).', diag: true },
+      { n: 'entitled_days', t: 'tinyint', d: 'Días otorgados según vacation_entitlements.', diag: true },
+      { n: 'adjustment_days', t: 'smallint', d: 'Ajuste manual con signo (compensaciones, correcciones).', diag: true },
+      { n: 'taken_days', t: 'tinyint', d: 'Días consumidos por solicitudes aprobadas.', diag: true },
+      { n: 'expires_on', t: 'date', d: 'Fecha límite para disfrutar los días.', diag: true },
+    ] },
+  { name: 'vacation_requests', block: 'ausencia', x: 1000, y: 560, page: 3,
+    purpose: 'Solicitud de vacaciones con flujo de aprobación. El aprobador sale del responsable de la sub área del empleado.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'employee_id', t: 'bigint', d: 'Empleado que solicita.', fk: 'employees', diag: true },
+      { n: 'starts_on', t: 'date', d: 'Primer día solicitado.', diag: true },
+      { n: 'ends_on', t: 'date', d: 'Último día solicitado.', diag: true },
+      { n: 'requested_days', t: 'tinyint', d: 'Días que consume (naturales o hábiles según regla).', diag: true },
+      { n: 'status', t: 'enum', d: 'pending, approved, rejected, cancelled.', diag: true },
+      { n: 'comments', t: 'text', d: 'Comentario del solicitante.' },
+      { n: 'requested_by', t: 'bigint', d: 'Usuario que capturó (el empleado o RH).', fk: 'users' },
+      { n: 'approved_by', t: 'bigint', d: 'Usuario que aprobó o rechazó.', fk: 'users', diag: true },
+      { n: 'approved_at', t: 'datetime', d: 'Cuándo se resolvió.' },
+      { n: 'rejection_reason', t: 'varchar', d: 'Motivo del rechazo.' },
+    ] },
+  { name: 'vacation_request_days', block: 'ausencia', x: 1320, y: 560, page: 3,
+    purpose: 'Días concretos que consume una solicitud. Permite que el resumen diario marque exactamente esos días y que una solicitud que abarca dos periodos cargue cada día al periodo correcto.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'vacation_request_id', t: 'bigint', d: 'Solicitud.', fk: 'vacation_requests', diag: true },
+      { n: 'vacation_period_id', t: 'bigint', d: 'Periodo al que se carga el día.', fk: 'vacation_periods', diag: true },
+      { n: 'date', t: 'date', d: 'Día consumido. Único junto con vacation_request_id.', diag: true },
+    ] },
+  { name: 'leave_types', block: 'ausencia', x: 1000, y: 40, page: 3,
+    purpose: 'Catálogo de permisos e incidencias: permiso con goce, sin goce, incapacidad IMSS, falta justificada, home office.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'name', t: 'varchar(100)', d: 'Nombre.', diag: true },
+      { n: 'code', t: 'varchar(20)', d: 'Código corto.', diag: true },
+      { n: 'is_paid', t: 'boolean', d: 'Con o sin goce de sueldo.', diag: true },
+      { n: 'requires_document', t: 'boolean', d: 'Exige comprobante (por ejemplo, incapacidad).', diag: true },
+      { n: 'counts_as_absence', t: 'boolean', d: 'Si cuenta como falta en reportes.', diag: true },
+      { n: 'is_active', t: 'boolean', d: 'Activo o no.', diag: true },
+    ] },
+  { name: 'leaves', block: 'ausencia', x: 1320, y: 40, page: 3,
+    purpose: 'Permisos e incapacidades con el mismo flujo de aprobación que vacaciones. El folio del IMSS va aquí para incapacidades.',
+    cols: [
+      { n: 'id', t: 'bigint', d: 'Identificador.', pk: true, diag: true },
+      { n: 'employee_id', t: 'bigint', d: 'Empleado.', fk: 'employees', diag: true },
+      { n: 'leave_type_id', t: 'bigint', d: 'Tipo de permiso.', fk: 'leave_types', diag: true },
+      { n: 'starts_on', t: 'date', d: 'Primer día.', diag: true },
+      { n: 'ends_on', t: 'date', d: 'Último día.', diag: true },
+      { n: 'reason', t: 'varchar', d: 'Motivo.' },
+      { n: 'document_url', t: 'varchar', d: 'Comprobante adjunto.' },
+      { n: 'imss_folio', t: 'varchar(30)', d: 'Folio de la incapacidad del IMSS.', diag: true },
+      { n: 'status', t: 'enum', d: 'pending, approved, rejected, cancelled.', diag: true },
+      { n: 'requested_by', t: 'bigint', d: 'Usuario que capturó.', fk: 'users' },
+      { n: 'approved_by', t: 'bigint', d: 'Usuario que aprobó o rechazó.', fk: 'users', diag: true },
+      { n: 'approved_at', t: 'datetime', d: 'Cuándo se resolvió.' },
+    ] },
+];
+
+const COLORS = { org: '#6b7280', horario: '#2563eb', asistencia: '#059669', ausencia: '#d97706' };
+const W = 270, HEAD = 30, ROW = 17, PAD = 8;
+const byName = Object.fromEntries(T.map(t => [t.name, t]));
+T.forEach(t => { t.rows = t.cols.filter(c => c.diag); t.h = HEAD + t.rows.length * ROW + PAD; });
+
+// punto en el borde de una tabla: side = top|bottom|left|right, f = fracción a lo largo del lado
+function A(name, side, f) {
+  const t = byName[name];
+  if (side === 'top') return { x: t.x + W * f, y: t.y };
+  if (side === 'bottom') return { x: t.x + W * f, y: t.y + t.h };
+  if (side === 'left') return { x: t.x, y: t.y + t.h * f };
+  return { x: t.x + W, y: t.y + t.h * f };
+}
+
+// ---------- Relaciones: siempre del lado "uno" al lado "muchos" ----------
+const R = [];
+function rel(kind, pts) { R.push({ kind, pts }); }
+(() => {
+  let a, b;
+  // departments 1-N sub_departments
+  a = A('departments', 'right', .4); b = A('sub_departments', 'left', .4); rel('1n', [a, b]);
+  // sub_departments 1-N employees
+  a = A('sub_departments', 'bottom', .5); b = A('employees', 'top', .3); rel('1n', [a, { x: a.x, y: 250 }, { x: b.x, y: 250 }, b]);
+  // users 1-1 employees
+  a = A('users', 'bottom', .5); b = A('employees', 'top', .5); rel('11', [a, b]);
+  // employees 1-N employee_shifts
+  a = A('employees', 'left', .45); b = A('employee_shifts', 'right', .45); rel('1n', [a, b]);
+  // shifts 1-N employee_shifts
+  a = A('shifts', 'right', .45); b = A('employee_shifts', 'left', .45); rel('1n', [a, b]);
+  // shifts 1-N shift_days
+  a = A('shifts', 'bottom', .5); b = A('shift_days', 'top', .5); rel('1n', [a, b]);
+  // employees 1-N schedule_overrides
+  a = A('employees', 'left', .8); b = A('schedule_overrides', 'top', .5); rel('1n', [a, { x: 650, y: a.y }, { x: 650, y: 540 }, { x: b.x, y: 540 }, b]);
+  // employees 1-N attendance_punches
+  a = A('employees', 'bottom', .12); b = A('attendance_punches', 'top', .5); rel('1n', [a, { x: a.x, y: 500 }, { x: 668, y: 500 }, { x: 668, y: 840 }, { x: b.x, y: 840 }, b]);
+  // employees 1-N attendance_days
+  a = A('employees', 'bottom', .5); b = A('attendance_days', 'top', .5); rel('1n', [a, b]);
+  // employees 1-N vacation_periods
+  a = A('employees', 'right', .45); b = A('vacation_periods', 'left', .3); rel('1n', [a, b]);
+  // employees 1-N vacation_requests
+  a = A('employees', 'bottom', .75); b = A('vacation_requests', 'top', .35); rel('1n', [a, { x: a.x, y: 520 }, { x: b.x, y: 520 }, b]);
+  // employees 1-N leaves
+  a = A('employees', 'top', .82); b = A('leaves', 'bottom', .3); rel('1n', [a, { x: a.x, y: 250 }, { x: b.x, y: 250 }, b]);
+  // leave_types 1-N leaves
+  a = A('leave_types', 'right', .4); b = A('leaves', 'left', .4); rel('1n', [a, b]);
+  // vacation_requests 1-N attendance_days (vacation_request_id)
+  a = A('vacation_requests', 'left', .4); b = A('attendance_days', 'right', .55); rel('1n', [a, { x: b.x, y: a.y }]);
+  // vacation_requests 1-N vacation_request_days
+  a = A('vacation_requests', 'right', .5); b = A('vacation_request_days', 'left', .5); rel('1n', [a, b]);
+  // vacation_periods 1-N vacation_request_days
+  a = A('vacation_periods', 'bottom', .75); b = A('vacation_request_days', 'top', .3); rel('1n', [a, { x: a.x, y: 528 }, { x: b.x, y: 528 }, b]);
+  // vacation_periods consulta vacation_entitlements
+  a = A('vacation_periods', 'right', .35); b = A('vacation_entitlements', 'left', .5); rel('lookup', [a, b]);
+  // attendance_punches -> attendance_days (cálculo)
+  a = A('attendance_punches', 'right', .3); b = A('attendance_days', 'bottom', .3); rel('derived', [a, { x: b.x, y: a.y }, b]);
+})();
+
+// ---------- Render del diagrama ----------
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function renderDiagram() {
+  let s = `<svg viewBox="0 0 1630 1050" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="many" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,6 L12,0 M0,6 L12,6 M0,6 L12,12" fill="none" stroke="#374151" stroke-width="1.4"/>
+    </marker>
+    <marker id="one" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M6,0 L6,12" fill="none" stroke="#374151" stroke-width="1.6"/>
+    </marker>
+    <marker id="oneEnd" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M6,0 L6,12" fill="none" stroke="#374151" stroke-width="1.6"/>
+    </marker>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1630" height="1050" fill="#ffffff"/>`;
+
+  // líneas primero, para que queden bajo las cajas
+  for (const r of R) {
+    const d = r.pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+    let attrs = 'fill="none" stroke="#374151" stroke-width="1.4"';
+    if (r.kind === '1n') attrs += ' marker-start="url(#one)" marker-end="url(#many)"';
+    else if (r.kind === '11') attrs += ' marker-start="url(#one)" marker-end="url(#oneEnd)"';
+    else if (r.kind === 'lookup') attrs = 'fill="none" stroke="#6b7280" stroke-width="1.2" stroke-dasharray="5 4"';
+    else if (r.kind === 'derived') attrs = 'fill="none" stroke="#6b7280" stroke-width="1.2" stroke-dasharray="5 4" marker-end="url(#arrow)"';
+    s += `<path d="${d}" ${attrs}/>`;
+  }
+  // etiquetas de líneas punteadas
+  s += `<text x="1295" y="${A('vacation_periods','right',.35).y - 9}" font-size="9" fill="#6b7280" text-anchor="middle">consulta</text>`;
+  s += `<text x="${A('attendance_days','bottom',.3).x + 6}" y="${A('attendance_punches','right',.3).y - 6}" font-size="9" fill="#6b7280">se calcula de</text>`;
+
+  for (const t of T) {
+    const c = COLORS[t.block];
+    s += `<g>
+      <rect x="${t.x}" y="${t.y}" width="${W}" height="${t.h}" rx="5" fill="#fff" stroke="${c}" stroke-width="1.5"/>
+      <path d="M${t.x},${t.y + 5} a5,5 0 0 1 5,-5 h${W - 10} a5,5 0 0 1 5,5 v${HEAD - 5} h-${W} z" fill="${c}"/>
+      <text x="${t.x + 10}" y="${t.y + 20}" font-size="13" font-weight="700" fill="#fff" font-family="Consolas, Courier New, monospace">${t.name}</text>`;
+    if (t.existing) s += `<text x="${t.x + W - 10}" y="${t.y + 20}" font-size="9" fill="#fff" text-anchor="end" opacity=".9">existente</text>`;
+    t.rows.forEach((col, i) => {
+      const y = t.y + HEAD + 13 + i * ROW;
+      const label = col.dl || col.n;
+      const style = col.pk ? 'font-weight="700"' : (col.fk ? 'font-style="italic"' : '');
+      s += `<text x="${t.x + 10}" y="${y}" font-size="11.5" fill="#1f2937" font-family="Consolas, Courier New, monospace" ${style}>${esc(label)}</text>`;
+      let tag = col.pk ? 'PK' : (col.fk ? 'FK' : '');
+      if (col.isNew) tag = 'FK · nuevo';
+      if (tag) s += `<text x="${t.x + W - 10}" y="${y}" font-size="9" fill="${col.isNew ? '#92400e' : '#6b7280'}" text-anchor="end">${tag}</text>`;
+    });
+    s += `</g>`;
+  }
+  s += `</svg>`;
+  document.getElementById('diagram').innerHTML = s;
+}
+
+// ---------- Render del diccionario ----------
+function renderDict() {
+  const labels = { org: 'existente', horario: 'horarios', asistencia: 'asistencia', ausencia: 'ausencias y vacaciones' };
+  const order = { 1: ['departments', 'sub_departments', 'users', 'employees', 'shifts', 'shift_days', 'employee_shifts', 'schedule_overrides', 'holidays'],
+                  2: ['attendance_punches', 'attendance_days'],
+                  3: ['vacation_entitlements', 'vacation_periods', 'vacation_requests', 'vacation_request_days', 'leave_types', 'leaves'] };
+  for (const p of [1, 2, 3]) {
+    let s = '';
+    for (const name of order[p]) {
+      const t = byName[name];
+      s += `<div class="card h-${t.block}"><header><h3>${t.name}</h3><small>${labels[t.block]}</small></header>
+        <div class="purpose">${esc(t.purpose)}</div>
+        <table><thead><tr><th style="width:32%">Columna</th><th style="width:14%">Tipo</th><th>Descripción</th></tr></thead><tbody>`;
+      for (const c of t.cols) {
+        let tags = '';
+        if (c.pk) tags += '<span class="tag pk">PK</span>';
+        if (c.fk) tags += `<span class="tag fk">FK ${esc(c.fk)}</span>`;
+        if (c.isNew) tags += '<span class="tag new">nuevo</span>';
+        s += `<tr><td class="n">${esc(c.n)}${tags}</td><td class="t">${esc(c.t)}</td><td>${esc(c.d)}</td></tr>`;
+      }
+      s += `</tbody></table></div>`;
+    }
+    document.getElementById('dict-' + p).innerHTML = s;
+  }
+}
+renderDiagram();
+renderDict();
+</script>
+</body>
+</html>

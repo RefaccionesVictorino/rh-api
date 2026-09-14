@@ -17,6 +17,7 @@ class EmployeeController extends Controller
     {
         $employees = Employee::query()
             ->search($request->search())
+            ->with('currentShiftAssignment.shift')
             ->orderBy($request->sortBy(), $request->sortDir())
             // Desempate estable: sin esto, dos registros con el mismo valor en la
             // columna ordenada pueden alternar de página entre peticiones.
