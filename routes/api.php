@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\EmployeeAttendanceController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeShiftController;
 use App\Http\Controllers\ShiftController;
@@ -17,6 +18,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout-all', [AuthController::class, 'logoutAll']);
 
     Route::get('/employees', [EmployeeController::class, 'index'])
+        ->middleware('permission:empleados.ver');
+    Route::get('/employees/{employee}', [EmployeeController::class, 'show'])
+        ->middleware('permission:empleados.ver');
+    Route::put('/employees/{employee}', [EmployeeController::class, 'update'])
+        ->middleware('permission:empleados.editar');
+
+    // Asistencia calculada al vuelo desde las checadas y el turno vigente.
+    Route::get('/employees/{employee}/attendance', [EmployeeAttendanceController::class, 'calendar'])
         ->middleware('permission:empleados.ver');
 
     // Antes del apiResource: si no, /departments/chart entra por show() con

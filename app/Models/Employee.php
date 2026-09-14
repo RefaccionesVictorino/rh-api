@@ -63,6 +63,17 @@ class Employee extends Model
         return $this->belongsTo(SubDepartment::class);
     }
 
+    /** Usuario con el que checa en el reloj; a lo más uno por empleado. */
+    public function timeClockUser(): HasOne
+    {
+        return $this->hasOne(TimeClockUser::class);
+    }
+
+    public function attendancePunches(): HasMany
+    {
+        return $this->hasMany(AttendancePunch::class);
+    }
+
     /** Historial completo de turnos asignados. */
     public function shiftAssignments(): HasMany
     {

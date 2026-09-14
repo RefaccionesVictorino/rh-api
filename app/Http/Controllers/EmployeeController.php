@@ -3,16 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\IndexEmployeeRequest;
+use App\Http\Requests\UpdateEmployeeRequest;
 use App\Http\Resources\EmployeeResource;
 use App\Models\Employee;
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class EmployeeController extends Controller
 {
-    /**
-     * Listado paginado con búsqueda y ordenamiento por columna.
-     */
+    /** Relaciones que lleva el expediente completo de un empleado. */
+    private const DETAIL_RELATIONS = [
+        'subDepartment.department',
+        'currentShiftAssignment.shift.days',
+        'timeClockUser',
+    ];
+
+    /** Listado paginado con búsqueda y ordenamiento por columna. */
     public function index(IndexEmployeeRequest $request): AnonymousResourceCollection
     {
         $employees = Employee::query()
@@ -28,35 +33,15 @@ class EmployeeController extends Controller
         return EmployeeResource::collection($employees);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    public function show(Employee $employee): EmployeeResource
     {
-        //
+        return EmployeeResource::make($employee->load(self::DETAIL_RELATIONS));
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
+    public function update(UpdateEmployeeRequest $request, Employee $employee): EmployeeResource
     {
-        //
-    }
+        $employee->update($request->payload());
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+        return EmployeeResource::make($employee->refresh()->load(self::DETAIL_RELATIONS));
     }
 }
