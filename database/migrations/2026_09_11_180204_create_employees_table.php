@@ -29,6 +29,7 @@ return new class extends Migration
             $table->string('address');
             $table->string('municipality');
             $table->string('postal_code');
+            $table->string('photo_url')->nullable();
             $table->date('hire_date');
             $table->softDeletes();
             $table->timestamps();

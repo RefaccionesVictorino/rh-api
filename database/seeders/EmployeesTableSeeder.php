@@ -17,12 +17,15 @@ class EmployeesTableSeeder extends Seeder
 {
     private const TOTAL = 100;
 
+    /** Retratos disponibles por carpeta en randomuser.me. */
+    private const RETRATOS_POR_CARPETA = 100;
+
     /** Nombres por género para que RFC, CURP y nombre concuerden. */
     private array $nombres = [
         'masculino' => [
             'Juan', 'José', 'Miguel', 'Luis', 'Carlos', 'Jorge', 'Ricardo', 'Fernando',
             'Alejandro', 'Roberto', 'Eduardo', 'Javier', 'Sergio', 'Raúl', 'Arturo',
-            'Héctor', 'Óscar', 'Pedro', 'Manuel', 'Rafael', 'Andrés', 'Emiliano',
+            'Héctor', 'Óscar', 'Pedro', 'Manuel', 'Rafael', 'Andrés', 'Emiliano', 'Lamine',
             'Santiago', 'Diego', 'Gerardo',
         ],
         'femenino' => [
@@ -80,6 +83,7 @@ class EmployeesTableSeeder extends Seeder
         }
 
         $usados = ['rfc' => [], 'curp' => [], 'nss' => [], 'email' => []];
+        $usadas = ['men' => [], 'women' => []];
         $empleados = [];
 
         for ($i = 0; $i < self::TOTAL; $i++) {
@@ -116,6 +120,7 @@ class EmployeesTableSeeder extends Seeder
                 ),
                 'municipality' => $municipio,
                 'postal_code' => $codigosPostales[array_rand($codigosPostales)],
+                'photo_url' => $this->foto($genero, $usadas),
                 'hire_date' => $this->fechaIngreso($nacimiento)->format('Y-m-d'),
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -236,6 +241,35 @@ class EmployeesTableSeeder extends Seeder
             random_int(0, 99),
             random_int(0, 99999)
         );
+    }
+
+    /**
+     * Retrato de randomuser.me, acorde al género del registro.
+     * Cada carpeta tiene 100 imágenes (0-99); se evitan repeticiones
+     * mientras el inventario alcance.
+     *
+     * @param  array<string, array<int, bool>>  $usadas  carpeta => índices ya asignados
+     */
+    private function foto(string $genero, array &$usadas): string
+    {
+        // randomuser.me solo publica men/women; para no binario se alterna.
+        $carpeta = match ($genero) {
+            'masculino' => 'men',
+            'femenino' => 'women',
+            default => random_int(0, 1) ? 'men' : 'women',
+        };
+
+        if (count($usadas[$carpeta]) >= self::RETRATOS_POR_CARPETA) {
+            $usadas[$carpeta] = [];
+        }
+
+        do {
+            $indice = random_int(0, self::RETRATOS_POR_CARPETA - 1);
+        } while (isset($usadas[$carpeta][$indice]));
+
+        $usadas[$carpeta][$indice] = true;
+
+        return sprintf('https://randomuser.me/api/portraits/%s/%d.jpg', $carpeta, $indice);
     }
 
     private function telefono(): string

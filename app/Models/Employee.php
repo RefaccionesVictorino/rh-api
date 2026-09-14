@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Employee extends Model
@@ -28,7 +29,9 @@ class Employee extends Model
         'address',
         'municipality',
         'postal_code',
+        'photo_url',
         'hire_date',
+        'sub_department_id',
     ];
 
     protected function casts(): array
@@ -52,6 +55,40 @@ class Employee extends Model
         ]))));
     }
 
+    public function subDepartment(): BelongsTo
+    {
+        return $this->belongsTo(SubDepartment::class);
+    }
+
+    /**
+     * El área se llega a través de la sub área: el empleado no guarda
+     * department_id, para que no pueda contradecir a su sub área.
+     */
+    public function department(): ?Department
+    {
+        return $this->subDepartment?->department;
+    }
+
+    /**
+     * Empleados de un área completa, filtrando por la sub área a la que pertenecen.
+     */
+    public function scopeOfDepartment(Builder $query, ?int $departmentId): Builder
+    {
+        return $departmentId === null
+            ? $query
+            : $query->whereHas(
+                'subDepartment',
+                fn (Builder $q) => $q->where('department_id', $departmentId),
+            );
+    }
+
+    public function scopeOfSubDepartment(Builder $query, ?int $subDepartmentId): Builder
+    {
+        return $subDepartmentId === null
+            ? $query
+            : $query->where('sub_department_id', $subDepartmentId);
+    }
+
     /**
      * Búsqueda por nombre (en cualquiera de sus tres columnas), identificadores
      * fiscales, correo o municipio.
@@ -62,7 +99,7 @@ class Employee extends Model
             return $query;
         }
 
-        $like = '%' . str_replace(['%', '_'], ['\%', '\_'], $term) . '%';
+        $like = '%'.str_replace(['%', '_'], ['\%', '\_'], $term).'%';
 
         return $query->where(function (Builder $query) use ($like): void {
             $query

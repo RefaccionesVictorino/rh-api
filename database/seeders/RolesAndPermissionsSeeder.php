@@ -19,6 +19,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'usuarios' => ['ver', 'crear', 'editar', 'eliminar'],
         'roles' => ['ver', 'crear', 'editar', 'eliminar'],
         'empleados' => ['ver', 'crear', 'editar', 'eliminar'],
+        'areas' => ['ver', 'crear', 'editar', 'eliminar'],
+        'subareas' => ['ver', 'crear', 'editar', 'eliminar'],
     ];
 
     public function run(): void
@@ -39,7 +41,11 @@ class RolesAndPermissionsSeeder extends Seeder
         $admin->syncPermissions($all);
 
         $rh = Role::firstOrCreate(['name' => 'rh', 'guard_name' => 'web']);
-        $rh->syncPermissions(['empleados.ver', 'empleados.crear', 'empleados.editar']);
+        $rh->syncPermissions([
+            'empleados.ver', 'empleados.crear', 'empleados.editar',
+            'areas.ver', 'areas.crear', 'areas.editar',
+            'subareas.ver', 'subareas.crear', 'subareas.editar',
+        ]);
 
         Role::firstOrCreate(['name' => 'empleado', 'guard_name' => 'web']);
 

@@ -5,17 +5,12 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class IndexEmployeeRequest extends FormRequest
+class IndexSubDepartmentRequest extends FormRequest
 {
     /** Columnas por las que se permite ordenar. */
     public const SORTABLE = [
         'name',
-        'last_name',
-        'rfc',
-        'curp',
-        'nss',
-        'municipality',
-        'hire_date',
+        'code',
         'created_at',
     ];
 
@@ -39,6 +34,8 @@ class IndexEmployeeRequest extends FormRequest
             'per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],
             'sort_by' => ['nullable', 'string', Rule::in(self::SORTABLE)],
             'sort_dir' => ['nullable', 'string', Rule::in(['asc', 'desc'])],
+            'only_active' => ['nullable', 'boolean'],
+            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
         ];
     }
 
@@ -56,11 +53,23 @@ class IndexEmployeeRequest extends FormRequest
 
     public function sortBy(): string
     {
-        return (string) ($this->validated('sort_by') ?? 'created_at');
+        return (string) ($this->validated('sort_by') ?? 'name');
     }
 
     public function sortDir(): string
     {
-        return (string) ($this->validated('sort_dir') ?? 'desc');
+        return (string) ($this->validated('sort_dir') ?? 'asc');
+    }
+
+    public function onlyActive(): bool
+    {
+        return $this->boolean('only_active');
+    }
+
+    public function departmentId(): ?int
+    {
+        $id = $this->validated('department_id');
+
+        return $id === null ? null : (int) $id;
     }
 }
