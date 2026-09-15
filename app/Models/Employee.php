@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\CloudFrontSigner;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -56,6 +57,21 @@ class Employee extends Model
             $this->last_name,
             $this->second_last_name,
         ]))));
+    }
+
+    /**
+     * Foto lista para mostrarse.
+     *
+     * En la columna se guarda la URL cruda que devolvió el microservicio de
+     * carga; el bucket es privado, así que la firma se calcula al leer y nunca
+     * se persiste. Una firma guardada caduca a los minutos y dejaría el
+     * registro inservible.
+     */
+    protected function signedPhotoUrl(): Attribute
+    {
+        return Attribute::get(fn (): ?string => $this->photo_url
+            ? app(CloudFrontSigner::class)->sign($this->photo_url)
+            : null);
     }
 
     public function subDepartment(): BelongsTo

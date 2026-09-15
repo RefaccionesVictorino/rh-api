@@ -5,14 +5,8 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class UpdateEmployeeRequest extends FormRequest
+class StoreEmployeeRequest extends FormRequest
 {
-    public const GENDERS = ['masculino', 'femenino', 'no_binario'];
-
-    public const MARITAL_STATUSES = [
-        'Soltero(a)', 'Casado(a)', 'Divorciado(a)', 'Unión libre', 'Viudo(a)',
-    ];
-
     public function authorize(): bool
     {
         return true;
@@ -20,7 +14,8 @@ class UpdateEmployeeRequest extends FormRequest
 
     /**
      * RFC, CURP y NSS se comparan en mayúsculas y sin espacios: el checador y
-     * los formatos oficiales los manejan así.
+     * los formatos oficiales los manejan así. El RFC además se usa como PIN, de
+     * modo que una diferencia de mayúsculas cambiaría el usuario del equipo.
      */
     protected function prepareForValidation(): void
     {
@@ -40,47 +35,51 @@ class UpdateEmployeeRequest extends FormRequest
     }
 
     /**
+     * Mismas reglas que la edición, pero sin `sometimes`: al crear no hay
+     * registro previo del que heredar valores, así que todo campo obligatorio
+     * tiene que venir en la petición.
+     *
      * @return array<string, mixed>
      */
     public function rules(): array
     {
-        $employee = $this->route('employee');
-
         return [
-            'name' => ['sometimes', 'required', 'string', 'max:100'],
-            'last_name' => ['sometimes', 'required', 'string', 'max:100'],
-            'second_last_name' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'gender' => ['sometimes', 'required', Rule::in(self::GENDERS)],
+            'name' => ['required', 'string', 'max:100'],
+            'last_name' => ['required', 'string', 'max:100'],
+            'second_last_name' => ['nullable', 'string', 'max:100'],
+            'gender' => ['required', Rule::in(UpdateEmployeeRequest::GENDERS)],
             'rfc' => [
-                'sometimes', 'required', 'string',
+                'required', 'string',
                 'regex:/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/',
-                Rule::unique('employees', 'rfc')->ignore($employee->id)->whereNull('deleted_at'),
+                Rule::unique('employees', 'rfc')->whereNull('deleted_at'),
+                // El RFC se usa como PIN del checador: si ya existe un usuario
+                // con ese PIN el alta fallaría a medias, así que se detiene aquí.
+                Rule::unique('time_clock_users', 'pin'),
             ],
             'curp' => [
-                'sometimes', 'required', 'string', 'size:18',
+                'required', 'string', 'size:18',
                 'regex:/^[A-Z]{4}[0-9]{6}[HMX][A-Z]{5}[A-Z0-9][0-9]$/',
-                Rule::unique('employees', 'curp')->ignore($employee->id)->whereNull('deleted_at'),
+                Rule::unique('employees', 'curp')->whereNull('deleted_at'),
             ],
             'nss' => [
-                'sometimes', 'required', 'string', 'regex:/^[0-9]{11}$/',
-                Rule::unique('employees', 'nss')->ignore($employee->id)->whereNull('deleted_at'),
+                'required', 'string', 'regex:/^[0-9]{11}$/',
+                Rule::unique('employees', 'nss')->whereNull('deleted_at'),
             ],
-            'birth_country' => ['sometimes', 'required', 'string', 'max:100'],
-            'marital_status' => ['sometimes', 'required', Rule::in(self::MARITAL_STATUSES)],
-            'birthdate' => ['sometimes', 'required', 'date_format:Y-m-d', 'before:today'],
-            'work_phone' => ['sometimes', 'present', 'nullable', 'string', 'max:20'],
-            'personal_phone' => ['sometimes', 'required', 'string', 'max:20'],
-            'personal_email' => ['sometimes', 'required', 'email', 'max:150'],
-            'address' => ['sometimes', 'required', 'string', 'max:255'],
-            'municipality' => ['sometimes', 'required', 'string', 'max:100'],
-            'postal_code' => ['sometimes', 'required', 'string', 'regex:/^[0-9]{5}$/'],
-            // La foto se cambia por su propio endpoint, que sube el archivo al
-            // bucket; aquí se ignora para que un PUT del expediente no pueda
-            // apuntar la columna a una URL arbitraria.
+            'birth_country' => ['required', 'string', 'max:100'],
+            'marital_status' => ['required', Rule::in(UpdateEmployeeRequest::MARITAL_STATUSES)],
+            'birthdate' => ['required', 'date_format:Y-m-d', 'before:today'],
+            'work_phone' => ['present', 'nullable', 'string', 'max:20'],
+            'personal_phone' => ['required', 'string', 'max:20'],
+            'personal_email' => ['required', 'email', 'max:150'],
+            'address' => ['required', 'string', 'max:255'],
+            'municipality' => ['required', 'string', 'max:100'],
+            'postal_code' => ['required', 'string', 'regex:/^[0-9]{5}$/'],
+            // La foto se sube por su propio endpoint una vez creado el
+            // expediente: aquí solo viaja texto.
             'photo_url' => ['prohibited'],
-            'hire_date' => ['sometimes', 'required', 'date_format:Y-m-d'],
+            'hire_date' => ['required', 'date_format:Y-m-d'],
             'sub_department_id' => [
-                'sometimes', 'nullable', 'integer',
+                'nullable', 'integer',
                 Rule::exists('sub_departments', 'id')->whereNull('deleted_at'),
             ],
         ];
@@ -95,7 +94,7 @@ class UpdateEmployeeRequest extends FormRequest
     {
         $data = $this->validated();
 
-        if (array_key_exists('work_phone', $data) && $data['work_phone'] === null) {
+        if (($data['work_phone'] ?? null) === null) {
             $data['work_phone'] = '';
         }
 
@@ -112,11 +111,12 @@ class UpdateEmployeeRequest extends FormRequest
             'marital_status.in' => 'Elige un estado civil de la lista.',
             'sub_department_id.exists' => 'La sub área no existe o fue dada de baja.',
             'rfc.regex' => 'El RFC no tiene un formato válido.',
+            'rfc.unique' => 'Ya existe un registro con ese RFC.',
             'curp.regex' => 'La CURP no tiene un formato válido.',
             'curp.size' => 'La CURP debe tener 18 caracteres.',
             'nss.regex' => 'El NSS debe tener 11 dígitos.',
             'postal_code.regex' => 'El código postal debe tener 5 dígitos.',
-            'photo_url.prohibited' => 'La foto se cambia desde el expediente, no con este formulario.',
+            'photo_url.prohibited' => 'La foto se agrega desde el expediente, una vez creado el registro.',
             'birthdate.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
         ];
     }

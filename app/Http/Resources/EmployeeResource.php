@@ -35,7 +35,8 @@ class EmployeeResource extends JsonResource
             'address' => $this->address,
             'municipality' => $this->municipality,
             'postal_code' => $this->postal_code,
-            'photo_url' => $this->photo_url,
+            // Firmada al vuelo: el bucket es privado y la firma caduca sola.
+            'photo_url' => $this->signed_photo_url,
             'hire_date' => $this->hire_date?->toDateString(),
             'sub_department_id' => $this->sub_department_id,
             'sub_department' => SubDepartmentResource::make($this->whenLoaded('subDepartment')),

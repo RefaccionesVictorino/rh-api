@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeAttendanceController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\EmployeePhotoController;
 use App\Http\Controllers\EmployeeShiftController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SubDepartmentController;
@@ -19,9 +20,20 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/employees', [EmployeeController::class, 'index'])
         ->middleware('permission:empleados.ver');
+    // El alta crea también el usuario del checador y encola su envío a las
+    // terminales, de ahí que pida ambos permisos.
+    Route::post('/employees', [EmployeeController::class, 'store'])
+        ->middleware(['permission:empleados.crear', 'permission:checador.administrar']);
     Route::get('/employees/{employee}', [EmployeeController::class, 'show'])
         ->middleware('permission:empleados.ver');
     Route::put('/employees/{employee}', [EmployeeController::class, 'update'])
+        ->middleware('permission:empleados.editar');
+
+    // POST y no PUT: el archivo viaja como multipart y PHP solo puebla $_FILES
+    // en peticiones POST.
+    Route::post('/employees/{employee}/photo', [EmployeePhotoController::class, 'update'])
+        ->middleware('permission:empleados.editar');
+    Route::delete('/employees/{employee}/photo', [EmployeePhotoController::class, 'destroy'])
         ->middleware('permission:empleados.editar');
 
     // Asistencia calculada al vuelo desde las checadas y el turno vigente.

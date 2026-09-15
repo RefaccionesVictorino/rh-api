@@ -23,7 +23,9 @@ class EmployeeSummaryResource extends JsonResource
             'id' => $this->id,
             'full_name' => $this->full_name,
             'work_phone' => $this->work_phone,
-            'photo_url' => $this->photo_url,
+            // Firmada al vuelo, igual que en EmployeeResource: el bucket es
+            // privado y la URL cruda no se puede cargar desde el navegador.
+            'photo_url' => $this->signed_photo_url,
         ];
     }
 }
