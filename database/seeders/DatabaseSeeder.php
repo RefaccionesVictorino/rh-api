@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             // Catálogo, no datos de prueba: corre en todos los ambientes.
             DepartmentSeeder::class,
             LocationSeeder::class,
+            HolidaySeeder::class,
         ]);
 
         // Datos de prueba: el seeder se omite solo fuera de local.

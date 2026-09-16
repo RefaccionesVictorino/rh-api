@@ -6,7 +6,10 @@ use App\Http\Controllers\EmployeeAttendanceController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeePhotoController;
 use App\Http\Controllers\EmployeeShiftController;
+use App\Http\Controllers\HolidayController;
+use App\Http\Controllers\HolidayRuleController;
 use App\Http\Controllers\LocationController;
+use App\Http\Controllers\ScheduleOverrideController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SubDepartmentController;
 use App\Http\Controllers\TimeClock\TimeClockController;
@@ -90,6 +93,30 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/shift-assignments/{shift_assignment}', [EmployeeShiftController::class, 'update'])
         ->middleware('permission:turnos.asignar');
     Route::delete('/shift-assignments/{shift_assignment}', [EmployeeShiftController::class, 'destroy'])
+        ->middleware('permission:turnos.asignar');
+
+    // Catálogo de festivos que se repiten cada año; sus fechas se calculan al
+    // consultar el calendario, no se capturan.
+    Route::apiResource('holiday-rules', HolidayRuleController::class)
+        ->parameters(['holiday-rules' => 'holiday_rule'])
+        ->middlewareFor(['index', 'show'], 'permission:festivos.ver')
+        ->middlewareFor('store', 'permission:festivos.crear')
+        ->middlewareFor('update', 'permission:festivos.editar')
+        ->middlewareFor('destroy', 'permission:festivos.eliminar');
+
+    Route::apiResource('holidays', HolidayController::class)
+        ->middlewareFor(['index', 'show'], 'permission:festivos.ver')
+        ->middlewareFor('store', 'permission:festivos.crear')
+        ->middlewareFor('update', 'permission:festivos.editar')
+        ->middlewareFor('destroy', 'permission:festivos.eliminar');
+
+    // Excepción de horario de un empleado en un día concreto; manda sobre el
+    // festivo y sobre el turno.
+    Route::get('/employees/{employee}/schedule-overrides', [ScheduleOverrideController::class, 'index'])
+        ->middleware('permission:turnos.ver');
+    Route::post('/employees/{employee}/schedule-overrides', [ScheduleOverrideController::class, 'store'])
+        ->middleware('permission:turnos.asignar');
+    Route::delete('/schedule-overrides/{schedule_override}', [ScheduleOverrideController::class, 'destroy'])
         ->middleware('permission:turnos.asignar');
 
     // Administración del checador. Las escrituras devuelven 202: el terminal

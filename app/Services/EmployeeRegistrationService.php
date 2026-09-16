@@ -25,7 +25,7 @@ class EmployeeRegistrationService
 
     /**
      * @param  array<string, mixed>  $attributes  Datos ya validados del expediente.
-     * @return array{employee: Employee, devices: int}  `devices` = terminales a las que se encoló el alta.
+     * @return array{employee: Employee, devices: int} `devices` = terminales a las que se encoló el alta.
      */
     public function register(array $attributes): array
     {

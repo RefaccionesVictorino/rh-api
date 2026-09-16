@@ -170,8 +170,8 @@ class TimeClockController extends Controller
      * página, en vez de una por renglón. Cada asignación trae el horario del
      * día de la semana que corresponde, que es lo que se muestra como horario.
      *
-     * @param  \Illuminate\Support\Collection<int, AttendancePunch>  $punches
-     * @return \Illuminate\Support\Collection<string, EmployeeShift>
+     * @param  Collection<int, AttendancePunch>  $punches
+     * @return Collection<string, EmployeeShift>
      */
     private function shiftsForPunches($punches): Collection
     {

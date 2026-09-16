@@ -79,6 +79,11 @@ class Employee extends Model
         return $this->belongsTo(SubDepartment::class);
     }
 
+    public function scheduleOverrides(): HasMany
+    {
+        return $this->hasMany(ScheduleOverride::class);
+    }
+
     /** Usuario con el que checa en el reloj; a lo más uno por empleado. */
     public function timeClockUser(): HasOne
     {

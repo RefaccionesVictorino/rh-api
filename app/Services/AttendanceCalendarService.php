@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AttendancePunch;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
+use App\Models\ScheduleOverride;
 use App\Models\Shift;
 use App\Models\ShiftDay;
 use Carbon\CarbonImmutable;
@@ -13,9 +14,10 @@ use Illuminate\Support\Collection;
 /**
  * Asistencia día por día de un empleado en un rango de fechas.
  *
- * Se calcula al vuelo a partir de las checadas crudas y del turno vigente en
- * cada fecha. No se persiste: cambiar el turno o recibir una checada atrasada
- * del equipo debe reflejarse sin recalcular nada.
+ * Se calcula al vuelo a partir de las checadas crudas, del turno vigente en
+ * cada fecha y de las excepciones que apliquen. No se persiste: cambiar el
+ * turno o recibir una checada atrasada del equipo debe reflejarse sin
+ * recalcular nada.
  */
 class AttendanceCalendarService
 {
@@ -26,6 +28,8 @@ class AttendanceCalendarService
     public const STATUS_ABSENT = 'absent';
 
     public const STATUS_REST = 'rest';
+
+    public const STATUS_HOLIDAY = 'holiday';
 
     public const STATUS_NO_SHIFT = 'no_shift';
 
@@ -39,6 +43,8 @@ class AttendanceCalendarService
      */
     private const NIGHT_EXIT_GRACE_MINUTES = 120;
 
+    public function __construct(private readonly HolidayCalendar $holidays) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -51,6 +57,13 @@ class AttendanceCalendarService
             ->overlapping($from, $to)
             ->orderBy('starts_on')
             ->get();
+
+        $holidays = $this->holidays->between($from, $to);
+
+        $overrides = $employee->scheduleOverrides()
+            ->betweenDates($from, $to)
+            ->get()
+            ->keyBy(fn (ScheduleOverride $override) => $override->date->toDateString());
 
         // Un día más al final: la salida de un turno nocturno del último día
         // del rango queda en la madrugada siguiente.
@@ -67,25 +80,32 @@ class AttendanceCalendarService
         $days = [];
 
         for ($date = $from; $date->lte($to); $date = $date->addDay()) {
+            $key = $date->toDateString();
+
             /** @var EmployeeShift|null $assignment */
             $assignment = $assignments->first(fn (EmployeeShift $item) => $item->coversDate($date));
             $shift = $assignment?->shift;
-            $shiftDay = $shift?->dayFor($date->dayOfWeek);
 
-            $punches = ($punchesByDate->get($date->toDateString()) ?? collect())
+            $expected = ExpectedSchedule::resolve(
+                $shift?->dayFor($date->dayOfWeek),
+                $holidays->get($key),
+                $overrides->get($key),
+            );
+
+            $punches = ($punchesByDate->get($key) ?? collect())
                 ->reject(fn (AttendancePunch $punch) => isset($consumed[$punch->id]))
                 ->values();
 
-            if ($shiftDay !== null && $shiftDay->crosses_midnight) {
+            if ($expected->crossesMidnight()) {
                 $next = $punchesByDate->get($date->addDay()->toDateString()) ?? collect();
 
-                foreach ($this->nightExitPunches($shiftDay, $next, $consumed) as $punch) {
+                foreach ($this->nightExitPunches($expected, $next, $consumed) as $punch) {
                     $consumed[$punch->id] = true;
                     $punches->push($punch);
                 }
             }
 
-            $days[] = $this->day($date, $today, $shift, $shiftDay, $punches);
+            $days[] = $this->day($date, $today, $shift, $expected, $punches);
         }
 
         return [
@@ -106,9 +126,9 @@ class AttendanceCalendarService
      * @param  array<int, true>  $consumed
      * @return list<AttendancePunch>
      */
-    private function nightExitPunches(ShiftDay $shiftDay, Collection $next, array $consumed): array
+    private function nightExitPunches(ExpectedSchedule $expected, Collection $next, array $consumed): array
     {
-        $window = $shiftDay->workWindow();
+        $window = $expected->workWindow();
 
         if ($window === null) {
             return [];
@@ -138,46 +158,42 @@ class AttendanceCalendarService
         CarbonImmutable $date,
         CarbonImmutable $today,
         ?Shift $shift,
-        ?ShiftDay $shiftDay,
+        ExpectedSchedule $expected,
         Collection $punches,
     ): array {
-        $window = $shiftDay?->workWindow();
-        $isRest = $shiftDay !== null && $shiftDay->is_rest_day;
+        $window = $expected->workWindow();
 
-        // Si el equipo no distingue el tipo, la primera checada es la entrada
-        // y la última la salida.
-        $firstIn = $punches->first(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_IN)
-            ?? $punches->first();
-
-        $lastOut = $punches->last(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_OUT)
-            ?? ($punches->count() > 1 ? $punches->last() : null);
-
-        if ($lastOut !== null && $firstIn !== null && $lastOut->is($firstIn)) {
-            $lastOut = null;
-        }
+        $pairs = $this->pairPunches($punches);
+        $firstIn = $pairs['first_in'];
+        $lastOut = $pairs['last_out'];
 
         $inMinutes = $firstIn === null ? null : $this->minutesOfDay($firstIn);
         $outMinutes = $lastOut === null ? null : $this->minutesOfDay($lastOut)
             + ($lastOut->punched_at->toDateString() === $date->toDateString() ? 0 : ShiftDay::MINUTES_PER_DAY);
 
+        $breakMinutes = $this->breakMinutes($pairs['break_out'], $pairs['break_in']);
+
         $worked = $inMinutes !== null && $outMinutes !== null && $outMinutes > $inMinutes
-            ? $outMinutes - $inMinutes - $this->breakMinutes($punches)
+            ? $outMinutes - $inMinutes - $breakMinutes
             : 0;
 
         $lateMinutes = 0;
+        $breakOverrunMinutes = max(0, $breakMinutes - $expected->breakMinutes());
 
-        if ($shiftDay === null) {
+        if (! $expected->hasShift()) {
             $status = $punches->isEmpty() ? self::STATUS_NO_SHIFT : self::STATUS_WORKED;
-        } elseif ($isRest) {
-            $status = $punches->isEmpty() ? self::STATUS_REST : self::STATUS_WORKED;
+        } elseif ($expected->isRestDay()) {
+            $status = $punches->isEmpty()
+                ? ($expected->holiday !== null ? self::STATUS_HOLIDAY : self::STATUS_REST)
+                : self::STATUS_WORKED;
         } elseif ($punches->isEmpty()) {
             $status = $date->lt($today) ? self::STATUS_ABSENT : self::STATUS_PENDING;
         } else {
             $lateMinutes = max(0, $inMinutes - $window[0]);
 
-            if ($shift->absence_after_minutes !== null && $lateMinutes > $shift->absence_after_minutes) {
+            if ($shift?->absence_after_minutes !== null && $lateMinutes > $shift->absence_after_minutes) {
                 $status = self::STATUS_ABSENT;
-            } elseif ($lateMinutes > $shift->tolerance_minutes) {
+            } elseif ($lateMinutes > ($shift?->tolerance_minutes ?? 0)) {
                 $status = self::STATUS_LATE;
             } else {
                 $status = self::STATUS_ON_TIME;
@@ -185,27 +201,45 @@ class AttendanceCalendarService
         }
 
         $isScheduled = in_array($status, [self::STATUS_ON_TIME, self::STATUS_LATE], true);
+        $holiday = $expected->holiday;
 
         return [
             'date' => $date->toDateString(),
             'weekday' => $date->dayOfWeek,
             'is_today' => $date->equalTo($today),
             'status' => $status,
+            'schedule_source' => $expected->source,
             'shift' => $shift === null ? null : [
                 'id' => $shift->id,
                 'name' => $shift->name,
                 'code' => $shift->code,
             ],
+            'holiday' => $holiday === null ? null : [
+                'id' => $holiday->id,
+                'name' => $holiday->name,
+                'observance' => $holiday->observance,
+                'observance_label' => $holiday->observance_label,
+                'is_mandatory' => $holiday->is_mandatory,
+            ],
+            'override' => $expected->override === null ? null : [
+                'id' => $expected->override->id,
+                'reason' => $expected->override->reason,
+            ],
             'expected' => $window === null ? null : [
-                'start' => substr((string) $shiftDay->start_time, 0, 5),
-                'end' => substr((string) $shiftDay->end_time, 0, 5),
-                'crosses_midnight' => $shiftDay->crosses_midnight,
-                'work_minutes' => $shiftDay->work_minutes,
+                'start' => $expected->startTime(),
+                'end' => $expected->endTime(),
+                'crosses_midnight' => $expected->crossesMidnight(),
+                'work_minutes' => $expected->workMinutes(),
+                'break_minutes' => $expected->breakMinutes(),
             ],
             'first_in' => $firstIn?->punched_at->format('H:i'),
             'last_out' => $lastOut?->punched_at->format('H:i'),
+            'break_out' => $pairs['break_out']?->punched_at->format('H:i'),
+            'break_in' => $pairs['break_in']?->punched_at->format('H:i'),
             'late_minutes' => $lateMinutes,
             'worked_minutes' => max(0, $worked),
+            'break_minutes' => $breakMinutes,
+            'break_overrun_minutes' => $breakOverrunMinutes,
             // Entró pero no hay salida registrada y el día ya pasó.
             'missing_out' => $isScheduled && $lastOut === null && $date->lt($today),
             'punches' => $punches->map(fn (AttendancePunch $punch) => [
@@ -223,18 +257,58 @@ class AttendanceCalendarService
     }
 
     /**
-     * Minutos de comida a descontar cuando hay checadas de salida y regreso.
+     * Reparte las checadas del día en entrada, comida y salida.
+     *
+     * El equipo manda entrada y salida alternadas sin distinguir la comida, así
+     * que el par intermedio (una salida seguida de otra entrada) es la comida y
+     * la última salida es la de casa.
      *
      * @param  Collection<int, AttendancePunch>  $punches
+     * @return array{first_in: ?AttendancePunch, break_out: ?AttendancePunch, break_in: ?AttendancePunch, last_out: ?AttendancePunch}
      */
-    private function breakMinutes(Collection $punches): int
+    private function pairPunches(Collection $punches): array
     {
-        $out = $punches->first(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_BREAK_OUT);
-        $in = $out === null ? null : $punches->first(
-            fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_BREAK_IN
-                && $p->punched_at->gt($out->punched_at)
-        );
+        $empty = ['first_in' => null, 'break_out' => null, 'break_in' => null, 'last_out' => null];
 
+        if ($punches->isEmpty()) {
+            return $empty;
+        }
+
+        $explicitBreakOut = $punches->first(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_BREAK_OUT);
+
+        if ($explicitBreakOut !== null) {
+            return [
+                'first_in' => $punches->first(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_IN)
+                    ?? $punches->first(),
+                'break_out' => $explicitBreakOut,
+                'break_in' => $punches->first(
+                    fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_BREAK_IN
+                        && $p->punched_at->gt($explicitBreakOut->punched_at)
+                ),
+                'last_out' => $punches->last(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_OUT),
+            ];
+        }
+
+        $ordered = $punches->sortBy(fn (AttendancePunch $p) => $p->punched_at)->values();
+
+        $result = $empty;
+        $result['first_in'] = $ordered->first();
+
+        if ($ordered->count() > 1) {
+            $result['last_out'] = $ordered->last();
+        }
+
+        // Cuatro checadas: entrada, salida a comer, regreso, salida.
+        if ($ordered->count() >= 4) {
+            $result['break_out'] = $ordered[1];
+            $result['break_in'] = $ordered[2];
+        }
+
+        return $result;
+    }
+
+    private function breakMinutes(?AttendancePunch $out, ?AttendancePunch $in): int
+    {
         if ($out === null || $in === null) {
             return 0;
         }
@@ -255,18 +329,20 @@ class AttendanceCalendarService
     {
         $counts = array_fill_keys([
             self::STATUS_ON_TIME, self::STATUS_LATE, self::STATUS_ABSENT, self::STATUS_REST,
-            self::STATUS_NO_SHIFT, self::STATUS_PENDING, self::STATUS_WORKED,
+            self::STATUS_HOLIDAY, self::STATUS_NO_SHIFT, self::STATUS_PENDING, self::STATUS_WORKED,
         ], 0);
 
         $workedMinutes = 0;
         $expectedMinutes = 0;
         $lateMinutes = 0;
+        $breakOverrunMinutes = 0;
         $missingOut = 0;
 
         foreach ($days as $day) {
             $counts[$day['status']]++;
             $workedMinutes += $day['worked_minutes'];
             $lateMinutes += $day['late_minutes'];
+            $breakOverrunMinutes += $day['break_overrun_minutes'];
             $missingOut += $day['missing_out'] ? 1 : 0;
 
             // Solo los días ya evaluados suman jornada esperada.
@@ -285,6 +361,7 @@ class AttendanceCalendarService
             'worked_minutes' => $workedMinutes,
             'expected_minutes' => $expectedMinutes,
             'late_minutes' => $lateMinutes,
+            'break_overrun_minutes' => $breakOverrunMinutes,
             'missing_out' => $missingOut,
         ];
     }
