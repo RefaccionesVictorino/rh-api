@@ -3,7 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\AttendancePunch;
+use App\Models\Department;
 use App\Models\Employee;
+use App\Models\EmployeeShift;
+use App\Models\Shift;
+use App\Models\SubDepartment;
 use App\Models\TimeClockCommand;
 use App\Models\TimeClockDevice;
 use App\Models\TimeClockUser;
@@ -277,5 +281,85 @@ class TimeClockTest extends TestCase
             ->assertJsonPath('data.0.is_online', false);
 
         $this->postJson('/api/time-clock/users', ['pin' => '1', 'name' => 'x'])->assertForbidden();
+    }
+
+    public function test_filters_punches_by_type_area_and_the_shift_of_that_day(): void
+    {
+        $this->actingAsUserWith('checador.ver');
+
+        $device = TimeClockDevice::create(['serial_number' => self::SN, 'name' => 'Mostrador']);
+
+        $department = Department::create(['name' => 'Refacciones']);
+        $otherDepartment = Department::create(['name' => 'Administración']);
+        $subDepartment = SubDepartment::create([
+            'department_id' => $department->id, 'name' => 'Mostrador',
+        ]);
+        $otherSub = SubDepartment::create([
+            'department_id' => $otherDepartment->id, 'name' => 'Nóminas',
+        ]);
+
+        $employee = Employee::factory()->create(['sub_department_id' => $subDepartment->id]);
+        $other = Employee::factory()->create(['sub_department_id' => $otherSub->id]);
+
+        $morning = Shift::create(['name' => 'Matutino']);
+        $evening = Shift::create(['name' => 'Vespertino']);
+
+        foreach ([$morning, $evening] as $shift) {
+            $shift->syncDays([[
+                'weekday' => 1, 'is_rest_day' => false,
+                'start_time' => '09:00', 'end_time' => '18:00',
+            ]]);
+        }
+
+        // El empleado cambió de turno: matutino hasta el 13, vespertino desde el 14.
+        EmployeeShift::create([
+            'employee_id' => $employee->id, 'shift_id' => $morning->id,
+            'starts_on' => '2026-09-01', 'ends_on' => '2026-09-13',
+        ]);
+        EmployeeShift::create([
+            'employee_id' => $employee->id, 'shift_id' => $evening->id,
+            'starts_on' => '2026-09-14', 'ends_on' => null,
+        ]);
+
+        $old = AttendancePunch::create([
+            'employee_id' => $employee->id, 'device_id' => $device->id, 'pin' => '1001',
+            'punched_at' => '2026-09-07 09:00:00', 'punch_type' => AttendancePunch::TYPE_IN,
+        ]);
+        AttendancePunch::create([
+            'employee_id' => $employee->id, 'device_id' => $device->id, 'pin' => '1001',
+            'punched_at' => '2026-09-14 18:00:00', 'punch_type' => AttendancePunch::TYPE_OUT,
+        ]);
+        AttendancePunch::create([
+            'employee_id' => $other->id, 'device_id' => $device->id, 'pin' => '2002',
+            'punched_at' => '2026-09-14 09:00:00', 'punch_type' => AttendancePunch::TYPE_IN,
+        ]);
+
+        $this->getJson('/api/time-clock/punches?punch_type='.AttendancePunch::TYPE_OUT)
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.punch_type_label', 'Salida');
+
+        $this->getJson("/api/time-clock/punches?department_id={$department->id}")
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.department.name', 'Refacciones')
+            ->assertJsonPath('data.0.sub_department.name', 'Mostrador');
+
+        $this->getJson("/api/time-clock/punches?sub_department_id={$otherSub->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.employee_name', $other->full_name);
+
+        // La checada del 7 cae en el turno vigente ese día, no en el de hoy.
+        $this->getJson("/api/time-clock/punches?shift_id={$morning->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $old->id)
+            ->assertJsonPath('data.0.shift.name', 'Matutino');
+
+        $this->getJson("/api/time-clock/punches?shift_id={$evening->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.shift.name', 'Vespertino');
     }
 }
