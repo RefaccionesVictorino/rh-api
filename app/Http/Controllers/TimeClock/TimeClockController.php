@@ -5,6 +5,7 @@ namespace App\Http\Controllers\TimeClock;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ExecuteTimeClockCommandRequest;
 use App\Http\Requests\StoreTimeClockUserRequest;
+use App\Http\Requests\UpdateTimeClockDeviceRequest;
 use App\Models\AttendancePunch;
 use App\Models\TimeClockCommand;
 use App\Models\TimeClockDevice;
@@ -28,22 +29,24 @@ class TimeClockController extends Controller
     public function devices(): JsonResponse
     {
         $devices = TimeClockDevice::withCount('punches')
+            ->with('branch:id,name,code')
             ->orderBy('name')
             ->get()
-            ->map(fn (TimeClockDevice $device) => [
-                'id' => $device->id,
-                'serial_number' => $device->serial_number,
-                'name' => $device->name,
-                'location' => $device->location,
-                'ip_address' => $device->ip_address,
-                'is_active' => $device->is_active,
-                'is_online' => $device->isOnline(),
-                'last_seen_at' => $device->last_seen_at,
-                'punches_count' => $device->punches_count,
-                'pending_commands_count' => $device->commands()->pending()->count(),
-            ]);
+            ->map(fn (TimeClockDevice $device) => $this->devicePayload($device));
 
         return response()->json(['data' => $devices]);
+    }
+
+    /** Cambiar la sucursal solo afecta a las checadas que se registren después. */
+    public function updateDevice(UpdateTimeClockDeviceRequest $request, TimeClockDevice $device): JsonResponse
+    {
+        $device->update($request->validated());
+
+        return response()->json([
+            'data' => $this->devicePayload(
+                $device->load('branch:id,name,code')->loadCount('punches')
+            ),
+        ]);
     }
 
     /** Checadas con filtros de fecha, empleado, PIN y equipo. */
@@ -55,16 +58,22 @@ class TimeClockController extends Controller
             'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
             'pin' => ['nullable', 'string', 'max:20'],
             'device_id' => ['nullable', 'integer', 'exists:time_clock_devices,id'],
+            'location_id' => ['nullable', 'integer', 'exists:locations,id'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
         ]);
 
         $punches = AttendancePunch::query()
-            ->with(['device:id,name,serial_number', 'employee:id,name,last_name,second_last_name'])
+            ->with([
+                'device:id,name,serial_number',
+                'location:id,name,code',
+                'employee:id,name,last_name,second_last_name',
+            ])
             ->when($filters['from'] ?? null, fn ($q, $v) => $q->where('punched_at', '>=', $v.' 00:00:00'))
             ->when($filters['to'] ?? null, fn ($q, $v) => $q->where('punched_at', '<=', $v.' 23:59:59'))
             ->when($filters['employee_id'] ?? null, fn ($q, $v) => $q->where('employee_id', $v))
             ->when($filters['pin'] ?? null, fn ($q, $v) => $q->where('pin', $v))
             ->when($filters['device_id'] ?? null, fn ($q, $v) => $q->where('device_id', $v))
+            ->atLocation($filters['location_id'] ?? null)
             ->orderByDesc('punched_at')
             ->paginate($filters['per_page'] ?? 50)
             ->withQueryString();
@@ -80,6 +89,8 @@ class TimeClockController extends Controller
             'verify_mode_label' => $punch->verify_mode_label,
             'source' => $punch->source,
             'device' => $punch->device?->name,
+            'location_id' => $punch->location_id,
+            'location' => $punch->location?->name,
         ]);
 
         return response()->json($punches);
@@ -179,6 +190,27 @@ class TimeClockController extends Controller
         $devices->each($action);
 
         return $devices->count();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function devicePayload(TimeClockDevice $device): array
+    {
+        return [
+            'id' => $device->id,
+            'serial_number' => $device->serial_number,
+            'name' => $device->name,
+            'location_id' => $device->location_id,
+            'location_name' => $device->branch?->name,
+            'location' => $device->location,
+            'ip_address' => $device->ip_address,
+            'is_active' => $device->is_active,
+            'is_online' => $device->isOnline(),
+            'last_seen_at' => $device->last_seen_at,
+            'punches_count' => $device->punches_count,
+            'pending_commands_count' => $device->commands()->pending()->count(),
+        ];
     }
 
     /**

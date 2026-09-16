@@ -48,7 +48,7 @@ class AttendancePunch extends Model
     public const SOURCES = ['device', 'app', 'web', 'manual'];
 
     protected $fillable = [
-        'employee_id', 'device_id', 'pin', 'punched_at', 'punch_type',
+        'employee_id', 'device_id', 'location_id', 'pin', 'punched_at', 'punch_type',
         'verify_mode', 'work_code', 'source', 'created_by', 'notes', 'raw_line',
     ];
 
@@ -72,6 +72,11 @@ class AttendancePunch extends Model
         return $this->belongsTo(TimeClockDevice::class, 'device_id');
     }
 
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class);
+    }
+
     public function timeClockUser(): BelongsTo
     {
         return $this->belongsTo(TimeClockUser::class, 'pin', 'pin');
@@ -85,6 +90,11 @@ class AttendancePunch extends Model
     public function scopeForEmployee(Builder $query, int $employeeId): Builder
     {
         return $query->where('employee_id', $employeeId);
+    }
+
+    public function scopeAtLocation(Builder $query, ?int $locationId): Builder
+    {
+        return $locationId === null ? $query : $query->where('location_id', $locationId);
     }
 
     /** Rango de fechas inclusivo, recibiendo solo el día. */

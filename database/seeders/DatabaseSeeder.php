@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             RolesAndPermissionsSeeder::class,
             // Catálogo, no datos de prueba: corre en todos los ambientes.
             DepartmentSeeder::class,
+            LocationSeeder::class,
         ]);
 
         // Datos de prueba: el seeder se omite solo fuera de local.

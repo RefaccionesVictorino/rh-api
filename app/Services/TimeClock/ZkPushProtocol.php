@@ -100,6 +100,9 @@ class ZkPushProtocol
                 ],
                 [
                     'employee_id' => $employeeIdsByPin[$pin],
+                    // Se copia, no se deriva: la checada debe conservar la
+                    // sucursal aunque el equipo se reubique o se dé de baja.
+                    'location_id' => $device->location_id,
                     'verify_mode' => (int) ($fields[3] ?? 0),
                     'work_code' => (int) ($fields[4] ?? 0),
                     'source' => 'device',

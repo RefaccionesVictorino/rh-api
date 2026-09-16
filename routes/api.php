@@ -6,6 +6,7 @@ use App\Http\Controllers\EmployeeAttendanceController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeePhotoController;
 use App\Http\Controllers\EmployeeShiftController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SubDepartmentController;
 use App\Http\Controllers\TimeClock\TimeClockController;
@@ -64,6 +65,12 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middlewareFor('update', 'permission:subareas.editar')
         ->middlewareFor('destroy', 'permission:subareas.eliminar');
 
+    Route::apiResource('locations', LocationController::class)
+        ->middlewareFor(['index', 'show'], 'permission:sucursales.ver')
+        ->middlewareFor('store', 'permission:sucursales.crear')
+        ->middlewareFor('update', 'permission:sucursales.editar')
+        ->middlewareFor('destroy', 'permission:sucursales.eliminar');
+
     Route::apiResource('shifts', ShiftController::class)
         ->middlewareFor(['index', 'show'], 'permission:turnos.ver')
         ->middlewareFor('store', 'permission:turnos.crear')
@@ -96,6 +103,8 @@ Route::middleware('auth:sanctum')->group(function () {
         });
 
         Route::middleware('permission:checador.administrar')->group(function () {
+            // Responde 200 y no 202: es el único de este grupo que no encola.
+            Route::put('/devices/{device}', [TimeClockController::class, 'updateDevice']);
             Route::post('/devices/{device}/execute', [TimeClockController::class, 'execute']);
             Route::post('/users', [TimeClockController::class, 'storeUser']);
             Route::delete('/users/{user}', [TimeClockController::class, 'destroyUser']);

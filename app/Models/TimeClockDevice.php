@@ -3,13 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class TimeClockDevice extends Model
 {
     protected $fillable = [
-        'serial_number', 'name', 'location', 'model', 'firmware', 'ip_address',
-        'is_active', 'att_log_stamp', 'op_log_stamp', 'last_seen_at',
+        'serial_number', 'location_id', 'name', 'location', 'model', 'firmware',
+        'ip_address', 'is_active', 'att_log_stamp', 'op_log_stamp', 'last_seen_at',
     ];
 
     /**
@@ -28,6 +29,15 @@ class TimeClockDevice extends Model
             'is_active' => 'boolean',
             'last_seen_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Sucursal donde está instalado. La columna `location` es distinta: texto
+     * libre para ubicar el equipo dentro de la sucursal ("recepción", "almacén").
+     */
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_id');
     }
 
     public function punches(): HasMany
