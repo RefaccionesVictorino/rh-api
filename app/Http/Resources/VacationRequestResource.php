@@ -27,6 +27,7 @@ class VacationRequestResource extends JsonResource
             'status_label' => $this->status_label,
             'comments' => $this->comments,
             'rejection_reason' => $this->rejection_reason,
+            'requested_at' => $this->created_at,
             'reviewed_at' => $this->reviewed_at,
             'employee' => EmployeeSummaryResource::make($this->whenLoaded('employee')),
             // Solo cuando el listado cargó la rama completa; el calendario lo

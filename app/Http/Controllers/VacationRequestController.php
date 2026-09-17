@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\IndexVacationRequestRequest;
 use App\Http\Requests\StoreVacationRequestRequest;
 use App\Http\Resources\VacationRequestResource;
 use App\Models\Employee;
@@ -13,25 +14,15 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Validation\Rule;
 
 class VacationRequestController extends Controller
 {
     public function __construct(private readonly VacationRequestService $requests) {}
 
     /** Bandeja de solicitudes, filtrable por estatus, fechas y área. */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(IndexVacationRequestRequest $request): AnonymousResourceCollection
     {
-        $filters = $request->validate([
-            'status' => ['nullable', Rule::in(array_keys(VacationRequest::STATUSES))],
-            'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
-            'department_id' => ['nullable', 'integer', 'exists:departments,id'],
-            'sub_department_id' => ['nullable', 'integer', 'exists:sub_departments,id'],
-            'from' => ['nullable', 'date_format:Y-m-d'],
-            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
-        ]);
+        $filters = $request->validated();
 
         $requests = VacationRequest::query()
             ->with(['employee.subDepartment.department', 'requestedBy', 'reviewedBy'])
@@ -53,19 +44,39 @@ class VacationRequestController extends Controller
                 'employee',
                 fn (Builder $e) => $e->search($v),
             ))
-            ->orderByDesc('starts_on')
-            ->orderByDesc('id')
-            ->paginate($filters['per_page'] ?? 25)
+            ->tap(fn (Builder $q) => $this->applySort($q, $request->sortBy(), $request->sortDir()))
+            ->paginate($request->perPage())
             ->withQueryString();
 
         return VacationRequestResource::collection($requests);
+    }
+
+    /**
+     * El id desempata: sin él, dos solicitudes con la misma fecha cambian de
+     * lugar entre páginas y un registro puede repetirse o perderse.
+     */
+    private function applySort(Builder $query, string $sortBy, string $sortDir): void
+    {
+        if ($sortBy === 'employee') {
+            // El nombre vive en la relación: subconsulta en lugar de join para
+            // no duplicar filas ni estorbar a los filtros por whereHas.
+            $query->orderBy(
+                Employee::select('name')->whereColumn('employees.id', 'vacation_requests.employee_id'),
+                $sortDir,
+            );
+        } else {
+            $query->orderBy($sortBy, $sortDir);
+        }
+
+        $query->orderBy('id', $sortDir);
     }
 
     public function forEmployee(Employee $employee): AnonymousResourceCollection
     {
         $requests = $employee->vacationRequests()
             ->with(['requestedBy', 'reviewedBy', 'days'])
-            ->orderByDesc('starts_on')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->get();
 
         return VacationRequestResource::collection($requests);

@@ -114,6 +114,93 @@ class VacationTest extends TestCase
         $this->assertSame('2026-08-31', $period->expires_on->toDateString());
     }
 
+    public function test_correcting_the_hire_date_realigns_the_periods(): void
+    {
+        $service = app(VacationPeriodService::class);
+        $employee = Employee::factory()->create(['hire_date' => '2019-03-18']);
+        $service->ensurePeriods($employee);
+
+        $employee->update(['hire_date' => '2014-03-18']);
+        $periods = $service->ensurePeriods($employee->fresh());
+
+        $this->assertCount(12, $periods);
+        $this->assertSame('2015-03-18', $periods->first()->starts_on->toDateString());
+        $this->assertSame('2026-03-18', $periods->last()->starts_on->toDateString());
+        $this->assertSame(
+            $periods->pluck('starts_on')->unique()->count(),
+            $periods->count(),
+            'Cada periodo debe cubrir un aniversario distinto.',
+        );
+    }
+
+    public function test_realigning_stops_two_copies_of_a_period_from_inflating_the_balance(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver');
+        $service = app(VacationPeriodService::class);
+        $employee = Employee::factory()->create(['hire_date' => '2019-03-18']);
+        $service->ensurePeriods($employee);
+
+        $employee->update(['hire_date' => '2014-03-18']);
+
+        $response = $this->getJson("/api/employees/{$employee->id}/vacation-balance")->assertOk();
+
+        $available = collect($response->json('data.periods'))->where('is_available', true);
+
+        // Dos periodos vigentes a la vez son normales mientras el más viejo no
+        // vence; lo que no puede pasar es que cubran el mismo rango de fechas.
+        $this->assertSame(
+            $available->pluck('starts_on')->unique()->count(),
+            $available->count(),
+        );
+        $this->assertEqualsWithDelta(48, $response->json('data.available_days'), 0.01);
+    }
+
+    public function test_an_expired_copy_of_a_period_stops_counting_once_realigned(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver');
+        $service = app(VacationPeriodService::class);
+        $employee = Employee::factory()->create(['hire_date' => '2019-03-18']);
+        $service->ensurePeriods($employee);
+
+        // Antes de realinear, el año 7 de la fecha vieja y el 12 de la real
+        // cubrían ambos 2026-03-18 y el saldo salía inflado.
+        $employee->update(['hire_date' => '2014-03-18']);
+        $service->ensurePeriods($employee->fresh());
+
+        CarbonImmutable::setTestNow('2026-09-18');
+
+        $response = $this->getJson("/api/employees/{$employee->id}/vacation-balance")->assertOk();
+
+        $this->assertEqualsWithDelta(24, $response->json('data.available_days'), 0.01);
+    }
+
+    public function test_a_shortened_hire_date_drops_the_periods_that_no_longer_exist(): void
+    {
+        $service = app(VacationPeriodService::class);
+        $employee = Employee::factory()->create(['hire_date' => '2014-03-18']);
+
+        $this->assertCount(12, $service->ensurePeriods($employee));
+
+        $employee->update(['hire_date' => '2023-03-18']);
+
+        $this->assertCount(3, $service->ensurePeriods($employee->fresh()));
+    }
+
+    public function test_a_period_with_taken_days_survives_the_realignment(): void
+    {
+        $service = app(VacationPeriodService::class);
+        $employee = Employee::factory()->create(['hire_date' => '2014-03-18']);
+        $service->ensurePeriods($employee);
+
+        $employee->vacationPeriods()->where('year_number', 12)->update(['taken_days' => 5]);
+        $employee->update(['hire_date' => '2023-03-18']);
+
+        $periods = $service->ensurePeriods($employee->fresh());
+
+        $this->assertNotNull($periods->firstWhere('year_number', 12));
+        $this->assertSame(5.0, $periods->firstWhere('year_number', 12)->taken_days);
+    }
+
     public function test_the_balance_endpoint_reports_the_available_days(): void
     {
         $this->actingAsUserWith('vacaciones.ver');
@@ -322,6 +409,38 @@ class VacationTest extends TestCase
         $this->assertSame(0.0, $employee->vacationPeriods()->first()->fresh()->taken_days);
     }
 
+    public function test_the_inbox_is_sorted_by_request_date_and_exposes_it(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar');
+        $employee = $this->employee(yearsAgo: 2);
+
+        // La primera solicitada es la que empieza más tarde, para que el orden
+        // por fecha de solicitud no coincida con el de fecha de inicio.
+        CarbonImmutable::setTestNow('2026-09-16 09:00:00');
+        $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-12-07', 'ends_on' => '2026-12-09',
+        ])->assertCreated();
+
+        CarbonImmutable::setTestNow('2026-09-17 15:30:00');
+        $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-10-05', 'ends_on' => '2026-10-07',
+        ])->assertCreated();
+
+        $response = $this->getJson('/api/vacations/requests')->assertOk();
+
+        $this->assertSame('2026-10-05', $response->json('data.0.starts_on'));
+        $this->assertSame('2026-12-07', $response->json('data.1.starts_on'));
+        $this->assertNotNull($response->json('data.0.requested_at'));
+
+        $this->getJson('/api/vacations/requests?sort_by=starts_on&sort_dir=asc')
+            ->assertOk()
+            ->assertJsonPath('data.0.starts_on', '2026-10-05');
+
+        $this->getJson("/api/employees/{$employee->id}/vacation-requests")
+            ->assertOk()
+            ->assertJsonPath('data.0.starts_on', '2026-10-05');
+    }
+
     public function test_a_manual_adjustment_changes_the_balance(): void
     {
         $this->actingAsUserWith('vacaciones.ver', 'vacaciones.configurar');
@@ -385,6 +504,37 @@ class VacationTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.starts_on', '2026-11-09');
+    }
+
+    public function test_the_requests_inbox_sorts_by_the_requested_column(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar');
+        $employee = $this->employee(yearsAgo: 2);
+
+        $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-10-05', 'ends_on' => '2026-10-07',
+        ])->assertCreated();
+
+        $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-11',
+        ])->assertCreated();
+
+        $this->getJson('/api/vacations/requests?sort_by=starts_on&sort_dir=asc')
+            ->assertOk()
+            ->assertJsonPath('data.0.starts_on', '2026-10-05');
+
+        $this->getJson('/api/vacations/requests?sort_by=starts_on&sort_dir=desc')
+            ->assertOk()
+            ->assertJsonPath('data.0.starts_on', '2026-11-09');
+    }
+
+    public function test_the_requests_inbox_rejects_an_unknown_sort_column(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver');
+
+        $this->getJson('/api/vacations/requests?sort_by=comments')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['sort_by']);
     }
 
     public function test_requires_permission(): void
