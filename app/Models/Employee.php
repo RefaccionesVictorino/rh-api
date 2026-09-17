@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\CloudFrontSigner;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -82,6 +83,26 @@ class Employee extends Model
     public function scheduleOverrides(): HasMany
     {
         return $this->hasMany(ScheduleOverride::class);
+    }
+
+    public function vacationPeriods(): HasMany
+    {
+        return $this->hasMany(VacationPeriod::class);
+    }
+
+    public function vacationRequests(): HasMany
+    {
+        return $this->hasMany(VacationRequest::class);
+    }
+
+    /** Años de servicio cumplidos a una fecha. */
+    public function yearsOfServiceOn(?CarbonInterface $date = null): int
+    {
+        if ($this->hire_date === null) {
+            return 0;
+        }
+
+        return (int) $this->hire_date->diffInYears($date ?? today());
     }
 
     /** Usuario con el que checa en el reloj; a lo más uno por empleado. */

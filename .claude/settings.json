@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "PowerShell(vendor\\\\bin\\\\pint app/Models app/Services app/Http/Controllers app/Http/Requests app/Http/Resources database/migrations database/seeders routes tests 2>&1)",
-      "PowerShell(php artisan tinker \"C:\\\\Users\\\\SERGIO~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--wamp64-www-rh-victorino-api\\\\1f2af4a2-1573-4922-9e08-756a4716d9e9\\\\scratchpad\\\\list-rules.php\" 2>&1)"
+      "PowerShell(php artisan tinker \"C:\\\\Users\\\\SERGIO~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--wamp64-www-rh-victorino-api\\\\1f2af4a2-1573-4922-9e08-756a4716d9e9\\\\scratchpad\\\\list-rules.php\" 2>&1)",
+      "PowerShell(php artisan test --filter=VacationTest 2>&1)",
+      "PowerShell(php artisan tinker \"C:\\\\Users\\\\SERGIO~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--wamp64-www-rh-victorino-api\\\\1f2af4a2-1573-4922-9e08-756a4716d9e9\\\\scratchpad\\\\debug-periods.php\" 2>&1)",
+      "PowerShell(php artisan db:seed --class=VacationEntitlementSeeder --force 2>&1)",
+      "PowerShell(php artisan tinker \"C:\\\\Users\\\\SERGIO~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--wamp64-www-rh-victorino-api\\\\1f2af4a2-1573-4922-9e08-756a4716d9e9\\\\scratchpad\\\\check-vacations.php\" 2>&1)"
     ]
   }
 }

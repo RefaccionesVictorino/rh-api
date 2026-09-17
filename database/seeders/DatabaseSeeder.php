@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             DepartmentSeeder::class,
             LocationSeeder::class,
             HolidaySeeder::class,
+            VacationEntitlementSeeder::class,
         ]);
 
         // Datos de prueba: el seeder se omite solo fuera de local.
@@ -27,5 +28,8 @@ class DatabaseSeeder extends Seeder
 
         // Ubica esa plantilla en el organigrama; depende de los dos anteriores.
         $this->call(OrgChartAssignmentSeeder::class);
+
+        // Necesita a la plantilla ya ubicada: reparte las solicitudes entre áreas.
+        $this->call(VacationRequestSeeder::class);
     }
 }

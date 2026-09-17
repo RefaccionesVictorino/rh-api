@@ -24,6 +24,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'sucursales' => ['ver', 'crear', 'editar', 'eliminar'],
         'turnos' => ['ver', 'crear', 'editar', 'eliminar', 'asignar'],
         'festivos' => ['ver', 'crear', 'editar', 'eliminar'],
+        'vacaciones' => ['ver', 'solicitar', 'autorizar', 'configurar'],
         'checador' => ['ver', 'administrar'],
     ];
 
@@ -52,6 +53,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'sucursales.ver', 'sucursales.crear', 'sucursales.editar',
             'turnos.ver', 'turnos.crear', 'turnos.editar', 'turnos.asignar',
             'festivos.ver', 'festivos.crear', 'festivos.editar',
+            'vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.configurar',
             'checador.ver', 'checador.administrar',
         ]);
 

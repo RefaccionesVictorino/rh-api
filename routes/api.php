@@ -13,6 +13,8 @@ use App\Http\Controllers\ScheduleOverrideController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SubDepartmentController;
 use App\Http\Controllers\TimeClock\TimeClockController;
+use App\Http\Controllers\VacationBalanceController;
+use App\Http\Controllers\VacationRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -118,6 +120,35 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:turnos.asignar');
     Route::delete('/schedule-overrides/{schedule_override}', [ScheduleOverrideController::class, 'destroy'])
         ->middleware('permission:turnos.asignar');
+
+    // Tabulador de la ley: antes del resto para que "entitlements" no entre
+    // por una ruta con parámetro.
+    Route::get('/vacations/entitlements', [VacationBalanceController::class, 'entitlements'])
+        ->middleware('permission:vacaciones.ver');
+    Route::put('/vacations/entitlements', [VacationBalanceController::class, 'updateEntitlements'])
+        ->middleware('permission:vacaciones.configurar');
+
+    Route::get('/vacations/requests', [VacationRequestController::class, 'index'])
+        ->middleware('permission:vacaciones.ver');
+
+    Route::get('/employees/{employee}/vacation-balance', [VacationBalanceController::class, 'show'])
+        ->middleware('permission:vacaciones.ver');
+    Route::get('/employees/{employee}/vacation-requests', [VacationRequestController::class, 'forEmployee'])
+        ->middleware('permission:vacaciones.ver');
+    Route::post('/employees/{employee}/vacation-requests/preview', [VacationRequestController::class, 'preview'])
+        ->middleware('permission:vacaciones.ver');
+    Route::post('/employees/{employee}/vacation-requests', [VacationRequestController::class, 'store'])
+        ->middleware('permission:vacaciones.solicitar');
+
+    Route::post('/vacation-requests/{vacation_request}/approve', [VacationRequestController::class, 'approve'])
+        ->middleware('permission:vacaciones.autorizar');
+    Route::post('/vacation-requests/{vacation_request}/reject', [VacationRequestController::class, 'reject'])
+        ->middleware('permission:vacaciones.autorizar');
+    Route::post('/vacation-requests/{vacation_request}/cancel', [VacationRequestController::class, 'cancel'])
+        ->middleware('permission:vacaciones.solicitar');
+
+    Route::put('/vacation-periods/{vacation_period}/adjust', [VacationBalanceController::class, 'adjust'])
+        ->middleware('permission:vacaciones.configurar');
 
     // Administración del checador. Las escrituras devuelven 202: el terminal
     // aplica los cambios cuando sondea, no al instante.
