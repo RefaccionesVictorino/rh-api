@@ -28,6 +28,9 @@ class VacationTest extends TestCase
 
         $this->seed(VacationEntitlementSeeder::class);
         CarbonImmutable::setTestNow('2026-09-16');
+
+        // Cada prueba declara su corte; el del entorno no debe filtrarse.
+        config(['vacations.start_date' => null]);
     }
 
     protected function tearDown(): void
@@ -121,6 +124,65 @@ class VacationTest extends TestCase
         $employee = $this->employee(yearsAgo: 0);
 
         $this->assertCount(0, app(VacationPeriodService::class)->ensurePeriods($employee));
+    }
+
+    /**
+     * El módulo arrancó sin el histórico de lo gozado: los periodos cerrados
+     * antes del corte no se generan, para no inventar un pasivo sin comprobar.
+     */
+    public function test_periods_closed_before_the_start_date_are_not_generated(): void
+    {
+        config(['vacations.start_date' => '2026-09-16']);
+
+        $employee = $this->employee(yearsAgo: 10);
+        $periods = app(VacationPeriodService::class)->ensurePeriods($employee);
+
+        $this->assertSame([10], $periods->pluck('year_number')->all());
+    }
+
+    public function test_the_start_date_keeps_the_seniority_of_the_current_period(): void
+    {
+        config(['vacations.start_date' => '2026-09-16']);
+
+        $employee = $this->employee(yearsAgo: 10);
+        $period = app(VacationPeriodService::class)->ensurePeriods($employee)->first();
+
+        $this->assertSame(10, $period->year_number);
+        $this->assertSame(22.0, (float) $period->entitled_days);
+    }
+
+    public function test_the_start_date_leaves_no_pending_balance(): void
+    {
+        config(['vacations.start_date' => '2026-09-16']);
+
+        $employee = $this->employee(yearsAgo: 10);
+        $summary = app(VacationPeriodService::class)->summary($employee);
+
+        $this->assertEqualsWithDelta(0, $summary['pending_days'], 0.01);
+        $this->assertEqualsWithDelta(0, $summary['expired_days'], 0.01);
+        $this->assertEqualsWithDelta(22, $summary['available_days'], 0.01);
+    }
+
+    public function test_a_period_before_the_start_date_survives_with_taken_days(): void
+    {
+        $employee = $this->employee(yearsAgo: 10);
+        $service = app(VacationPeriodService::class);
+        $service->ensurePeriods($employee);
+
+        $employee->vacationPeriods()->where('year_number', 3)->update(['taken_days' => 5]);
+
+        config(['vacations.start_date' => '2026-09-16']);
+
+        $this->assertSame([3, 10], $service->ensurePeriods($employee->fresh())->pluck('year_number')->all());
+    }
+
+    public function test_without_a_start_date_every_period_is_generated(): void
+    {
+        config(['vacations.start_date' => null]);
+
+        $employee = $this->employee(yearsAgo: 10);
+
+        $this->assertCount(10, app(VacationPeriodService::class)->ensurePeriods($employee));
     }
 
     /**

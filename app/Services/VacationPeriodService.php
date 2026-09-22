@@ -23,6 +23,19 @@ use Illuminate\Support\Collection;
 class VacationPeriodService
 {
     /**
+     * Fecha desde la que el sistema lleva el control. null cuando se generan
+     * todos los periodos desde el ingreso.
+     */
+    public static function startDate(): ?CarbonImmutable
+    {
+        $configured = config('vacations.start_date');
+
+        return $configured === null || $configured === ''
+            ? null
+            : CarbonImmutable::parse($configured)->startOfDay();
+    }
+
+    /**
      * Genera los periodos hasta la fecha indicada. Con una fecha futura crea
      * también los que todavía no abren, para poder programar vacaciones contra
      * ellos; esos periodos se conservan mientras sigan alineados al ingreso.
@@ -38,6 +51,7 @@ class VacationPeriodService
         $upTo ??= CarbonImmutable::today();
         $hireDate = CarbonImmutable::parse($employee->hire_date);
         $existing = $employee->vacationPeriods()->get()->keyBy('year_number');
+        $startDate = static::startDate();
 
         $lastYearNumber = 0;
 
@@ -53,6 +67,17 @@ class VacationPeriodService
             }
 
             $period = $existing->get($yearNumber);
+
+            if (
+                $startDate !== null
+                && $dates['ends_on']->lt($startDate)
+                && ($period === null || $period->taken_days == 0)
+            ) {
+                $period?->delete();
+                $yearNumber++;
+
+                continue;
+            }
 
             if ($period === null) {
                 $employee->vacationPeriods()->create($dates + [
