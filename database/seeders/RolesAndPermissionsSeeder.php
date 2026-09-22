@@ -60,7 +60,7 @@ class RolesAndPermissionsSeeder extends Seeder
         Role::firstOrCreate(['name' => 'empleado', 'guard_name' => 'web']);
 
         $user = User::firstOrCreate(
-            ['email' => 'admin@victorino.com'],
+            ['email' => 'seevaaluu@gmail.com'],
             ['name' => 'Administrador', 'password' => 'password']
         );
         $user->syncRoles(['admin']);

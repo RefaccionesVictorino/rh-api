@@ -3,17 +3,17 @@
 namespace App\Services;
 
 use App\Models\Employee;
-use App\Models\EmployeeShift;
-use App\Models\ScheduleOverride;
+use App\Models\Holiday;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
 /**
- * Días que un empleado tenía programado laborar en un rango.
+ * Días que consume un rango de vacaciones.
  *
- * Se apoya en la misma resolución de horario que la asistencia, de modo que
- * descansos, festivos y excepciones personales no consuman saldo de
- * vacaciones.
+ * Se cuentan de lunes a sábado, sin importar el turno del empleado: el saldo es
+ * el mismo para todos y no depende de cómo esté programado su horario. Solo se
+ * descuentan el domingo y los festivos de descanso; un festivo que se trabaja
+ * (horario normal o especial) sí consume día.
  */
 class WorkingDayCalculator
 {
@@ -24,33 +24,11 @@ class WorkingDayCalculator
      */
     public function between(Employee $employee, CarbonImmutable $from, CarbonImmutable $to): Collection
     {
-        $assignments = $employee->shiftAssignments()
-            ->with('shift.days')
-            ->overlapping($from, $to)
-            ->orderBy('starts_on')
-            ->get();
-
         $holidays = $this->holidays->between($from, $to);
-
-        $overrides = $employee->scheduleOverrides()
-            ->betweenDates($from, $to)
-            ->get()
-            ->keyBy(fn (ScheduleOverride $override) => $override->date->toDateString());
-
         $days = collect();
 
         for ($date = $from; $date->lte($to); $date = $date->addDay()) {
-            $key = $date->toDateString();
-
-            $assignment = $assignments->first(fn (EmployeeShift $item) => $item->coversDate($date));
-
-            $expected = ExpectedSchedule::resolve(
-                $assignment?->shift?->dayFor($date->dayOfWeek),
-                $holidays->get($key),
-                $overrides->get($key),
-            );
-
-            if ($expected->hasShift() && ! $expected->isRestDay()) {
+            if ($this->isCountable($date, $holidays->get($date->toDateString()))) {
                 $days->push($date);
             }
         }
@@ -61,5 +39,14 @@ class WorkingDayCalculator
     public function count(Employee $employee, CarbonImmutable $from, CarbonImmutable $to): int
     {
         return $this->between($employee, $from, $to)->count();
+    }
+
+    private function isCountable(CarbonImmutable $date, ?Holiday $holiday): bool
+    {
+        if ($date->isSunday()) {
+            return false;
+        }
+
+        return $holiday === null || ! $holiday->is_rest_day;
     }
 }

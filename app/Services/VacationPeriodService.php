@@ -23,6 +23,10 @@ use Illuminate\Support\Collection;
 class VacationPeriodService
 {
     /**
+     * Genera los periodos hasta la fecha indicada. Con una fecha futura crea
+     * también los que todavía no abren, para poder programar vacaciones contra
+     * ellos; esos periodos se conservan mientras sigan alineados al ingreso.
+     *
      * @return Collection<int, VacationPeriod>
      */
     public function ensurePeriods(Employee $employee, ?CarbonImmutable $upTo = null): Collection
@@ -42,18 +46,13 @@ class VacationPeriodService
         $yearNumber = 1;
 
         while (true) {
-            $startsOn = $hireDate->addYears($yearNumber);
+            $dates = $this->datesForYear($hireDate, $yearNumber);
 
-            if ($startsOn->gt($upTo)) {
+            if ($dates['starts_on']->gt($upTo)) {
                 break;
             }
 
             $period = $existing->get($yearNumber);
-            $dates = [
-                'starts_on' => $startsOn,
-                'ends_on' => $startsOn->addYear()->subDay(),
-                'expires_on' => $startsOn->addYear()->addMonths(VacationPeriod::MONTHS_TO_EXPIRE)->subDay(),
-            ];
 
             if ($period === null) {
                 $employee->vacationPeriods()->create($dates + [
@@ -82,36 +81,80 @@ class VacationPeriodService
             $yearNumber++;
         }
 
-        $this->discardPeriodsBeyond($employee, $existing, $lastYearNumber);
+        $this->reconcilePeriodsBeyond($existing, $hireDate, $lastYearNumber);
 
         return $employee->vacationPeriods()->oldestFirst()->get();
     }
 
     /**
-     * Periodos que sobreviven a una fecha de ingreso vieja: ya no corresponden
-     * a ningún año de servicio y deben desaparecer. Los que tienen días tomados
-     * se conservan a propósito.
+     * Periodos que sobreviven a una fecha de ingreso vieja: su aniversario ya
+     * no corresponde al año de servicio que dicen tener. Los que tienen días
+     * tomados se conservan a propósito. Un periodo futuro alineado no es
+     * huérfano: existe porque hay vacaciones programadas contra él.
      *
      * @return Collection<int, VacationPeriod>
      */
-    public function orphanPeriods(Employee $employee, ?CarbonImmutable $upTo = null): Collection
+    public function orphanPeriods(Employee $employee): Collection
     {
         if ($employee->hire_date === null) {
             return $employee->vacationPeriods()->oldestFirst()->get();
         }
 
-        $upTo ??= CarbonImmutable::today();
         $hireDate = CarbonImmutable::parse($employee->hire_date);
-        $yearsEarned = 0;
-
-        while ($hireDate->addYears($yearsEarned + 1)->lte($upTo)) {
-            $yearsEarned++;
-        }
 
         return $employee->vacationPeriods()
-            ->where('year_number', '>', $yearsEarned)
             ->oldestFirst()
-            ->get();
+            ->get()
+            ->reject(fn (VacationPeriod $period) => $this->isAligned($period, $hireDate));
+    }
+
+    /**
+     * Resumen para la ficha del empleado.
+     *
+     * `available_days` es lo que se puede pedir: solo el periodo en curso.
+     * `pending_days` es lo que sobró de años anteriores; no se solicita y la
+     * empresa decide si lo paga. `expired_days` es la parte del pendiente que
+     * ya prescribió (18 meses).
+     *
+     * @return array<string, mixed>
+     */
+    public function summary(Employee $employee): array
+    {
+        $periods = $this->ensurePeriods($employee);
+
+        $available = $periods->filter(fn (VacationPeriod $period) => $period->is_available);
+        $pending = $periods->filter(fn (VacationPeriod $period) => $period->is_pending);
+        $expired = $pending->filter(fn (VacationPeriod $period) => $period->is_expired);
+
+        return [
+            'years_of_service' => $employee->yearsOfServiceOn(),
+            'next_entitlement_days' => VacationEntitlement::daysForYear($employee->yearsOfServiceOn() + 1),
+            'available_days' => round($available->sum(fn (VacationPeriod $p) => $p->remaining_days), 1),
+            'pending_days' => round($pending->sum(fn (VacationPeriod $p) => $p->remaining_days), 1),
+            'expired_days' => round($expired->sum(fn (VacationPeriod $p) => $p->remaining_days), 1),
+            'taken_days' => round($periods->sum('taken_days'), 1),
+            'granted_days' => round($periods->sum(fn (VacationPeriod $p) => $p->granted_days), 1),
+            'periods' => $periods,
+        ];
+    }
+
+    /**
+     * @return array{starts_on: CarbonImmutable, ends_on: CarbonImmutable, expires_on: CarbonImmutable}
+     */
+    private function datesForYear(CarbonImmutable $hireDate, int $yearNumber): array
+    {
+        $startsOn = $hireDate->addYears($yearNumber);
+
+        return [
+            'starts_on' => $startsOn,
+            'ends_on' => $startsOn->addYear()->subDay(),
+            'expires_on' => $startsOn->addYear()->addMonths(VacationPeriod::MONTHS_TO_EXPIRE)->subDay(),
+        ];
+    }
+
+    private function isAligned(VacationPeriod $period, CarbonImmutable $hireDate): bool
+    {
+        return $period->starts_on->isSameDay($hireDate->addYears($period->year_number));
     }
 
     /**
@@ -126,38 +169,27 @@ class VacationPeriodService
     }
 
     /**
+     * Los periodos más allá del último generado solo se justifican por tener
+     * vacaciones programadas; sin días se van (se vuelven a crear cuando haga
+     * falta). Con días, un futuro alineado se mantiene al corriente y un
+     * resto de otra fecha de ingreso se conserva para revisión manual.
+     *
      * @param  Collection<int, VacationPeriod>  $existing
      */
-    private function discardPeriodsBeyond(Employee $employee, Collection $existing, int $lastYearNumber): void
+    private function reconcilePeriodsBeyond(Collection $existing, CarbonImmutable $hireDate, int $lastYearNumber): void
     {
         $existing
             ->filter(fn (VacationPeriod $period) => $period->year_number > $lastYearNumber)
-            ->filter(fn (VacationPeriod $period) => $period->taken_days == 0)
-            ->each->delete();
-    }
+            ->each(function (VacationPeriod $period) use ($hireDate): void {
+                if ($period->taken_days == 0) {
+                    $period->delete();
+                } elseif ($this->isAligned($period, $hireDate)) {
+                    $changes = $this->realignedDates($period, $this->datesForYear($hireDate, $period->year_number));
 
-    /**
-     * Resumen para la ficha del empleado: saldo disponible, vencido y futuro.
-     *
-     * @return array<string, mixed>
-     */
-    public function summary(Employee $employee): array
-    {
-        $periods = $this->ensurePeriods($employee);
-
-        $available = $periods->filter(fn (VacationPeriod $period) => $period->is_available);
-        $expired = $periods->filter(
-            fn (VacationPeriod $period) => $period->is_expired && $period->remaining_days > 0
-        );
-
-        return [
-            'years_of_service' => $employee->yearsOfServiceOn(),
-            'next_entitlement_days' => VacationEntitlement::daysForYear($employee->yearsOfServiceOn() + 1),
-            'available_days' => round($available->sum(fn (VacationPeriod $p) => $p->remaining_days), 1),
-            'expired_days' => round($expired->sum(fn (VacationPeriod $p) => $p->remaining_days), 1),
-            'taken_days' => round($periods->sum('taken_days'), 1),
-            'granted_days' => round($periods->sum(fn (VacationPeriod $p) => $p->granted_days), 1),
-            'periods' => $periods,
-        ];
+                    if ($changes !== []) {
+                        $period->update($changes);
+                    }
+                }
+            });
     }
 }

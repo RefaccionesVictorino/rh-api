@@ -52,7 +52,8 @@ class VacationPeriodsRealign extends Command
             $realigned++;
             $this->reportEmployee($employee, $misaligned);
 
-            $orphansWithDays = $this->periods->orphanPeriods($employee)
+            $orphansWithDays = $misaligned
+                ->filter(fn (VacationPeriod $period) => $period->year_number > $employee->yearsOfServiceOn())
                 ->filter(fn (VacationPeriod $period) => $period->taken_days > 0);
 
             if ($orphansWithDays->isNotEmpty()) {
@@ -99,21 +100,13 @@ class VacationPeriodsRealign extends Command
     }
 
     /**
-     * Periodos cuyas fechas no corresponden al aniversario que les toca, más
-     * los que sobran por venir de una fecha de ingreso anterior.
+     * Periodos cuyo aniversario no corresponde a la fecha de ingreso actual.
      *
      * @return Collection<int, VacationPeriod>
      */
     private function misalignedPeriods(Employee $employee): Collection
     {
-        $hireDate = $employee->hire_date;
-        $orphans = $this->periods->orphanPeriods($employee);
-
-        return $employee->vacationPeriods()
-            ->oldestFirst()
-            ->get()
-            ->filter(fn (VacationPeriod $period) => $orphans->contains('id', $period->id)
-                || ! $period->starts_on->isSameDay($hireDate->copy()->addYears($period->year_number)));
+        return $this->periods->orphanPeriods($employee);
     }
 
     /**
@@ -132,23 +125,26 @@ class VacationPeriodsRealign extends Command
         $this->table(
             ['Año', 'Inicio actual', 'Inicio correcto', 'Tomados', 'Acción'],
             $misaligned->map(function (VacationPeriod $period) use ($employee) {
-                $expected = $employee->hire_date->copy()->addYears($period->year_number);
-                $orphan = $this->periods->orphanPeriods($employee)->contains('id', $period->id);
+                $stillEarned = $period->year_number <= $employee->yearsOfServiceOn();
 
                 return [
                     $period->year_number,
                     $period->starts_on->toDateString(),
-                    $orphan ? '—' : $expected->toDateString(),
+                    $stillEarned ? $employee->hire_date->copy()->addYears($period->year_number)->toDateString() : '—',
                     rtrim(rtrim(number_format($period->taken_days, 1), '0'), '.'),
-                    $this->actionFor($period, $orphan),
+                    $this->actionFor($period, $stillEarned),
                 ];
             })->all(),
         );
     }
 
-    private function actionFor(VacationPeriod $period, bool $orphan): string
+    /**
+     * Refleja lo que hará el servicio: un año de servicio que sigue existiendo
+     * se recorre a su aniversario; uno que ya no existe se elimina.
+     */
+    private function actionFor(VacationPeriod $period, bool $stillEarned): string
     {
-        if (! $orphan) {
+        if ($stillEarned) {
             return 'realinear';
         }
 

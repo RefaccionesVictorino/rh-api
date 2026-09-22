@@ -31,6 +31,7 @@ class VacationBalanceController extends Controller
                 'years_of_service' => $summary['years_of_service'],
                 'next_entitlement_days' => $summary['next_entitlement_days'],
                 'available_days' => $summary['available_days'],
+                'pending_days' => $summary['pending_days'],
                 'expired_days' => $summary['expired_days'],
                 'taken_days' => $summary['taken_days'],
                 'granted_days' => $summary['granted_days'],

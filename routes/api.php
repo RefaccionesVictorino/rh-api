@@ -137,6 +137,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:vacaciones.ver');
     Route::post('/employees/{employee}/vacation-requests/preview', [VacationRequestController::class, 'preview'])
         ->middleware('permission:vacaciones.ver');
+    Route::post('/employees/{employee}/vacation-requests/branch-overlaps', [VacationRequestController::class, 'branchOverlaps'])
+        ->middleware('permission:vacaciones.ver');
     Route::post('/employees/{employee}/vacation-requests', [VacationRequestController::class, 'store'])
         ->middleware('permission:vacaciones.solicitar');
 

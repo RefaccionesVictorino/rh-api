@@ -78,13 +78,9 @@ class VacationRequestSeeder extends Seeder
             return;
         }
 
-        $shift = Shift::where('name', self::FALLBACK_SHIFT)->first() ?? Shift::first();
-
-        if ($shift === null) {
-            $this->command->warn('VacationRequestSeeder omitido: no hay turnos configurados.');
-
-            return;
-        }
+        $shift = Shift::where('name', self::FALLBACK_SHIFT)->first()
+            ?? Shift::first()
+            ?? $this->createFallbackShift();
 
         $candidates = $this->candidates(count($this->plan));
 
@@ -184,6 +180,33 @@ class VacationRequestSeeder extends Seeder
         $workingDays = $this->workingDays->between($employee, $from, $from->addDays(9));
 
         return $workingDays->first() ?? $from;
+    }
+
+    /**
+     * Ningún seeder del catálogo crea turnos, así que en una base recién armada
+     * no hay ninguno y sin él no se pueden calcular días hábiles. Se crea uno de
+     * lunes a viernes para que el seeder funcione por sí solo.
+     */
+    private function createFallbackShift(): Shift
+    {
+        $shift = Shift::create([
+            'name' => self::FALLBACK_SHIFT,
+            'description' => 'Lunes a viernes de 9:00 a 18:00',
+            'tolerance_minutes' => 10,
+            'is_active' => true,
+        ]);
+
+        $shift->syncDays(
+            collect(range(1, 5))
+                ->map(fn (int $weekday) => [
+                    'weekday' => $weekday,
+                    'start_time' => '09:00',
+                    'end_time' => '18:00',
+                ])
+                ->all(),
+        );
+
+        return $shift;
     }
 
     /** Sin turno vigente el cálculo de días hábiles da cero y la solicitud se rechaza. */

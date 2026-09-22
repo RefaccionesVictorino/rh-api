@@ -26,7 +26,7 @@ class VacationRequestService
     public function preview(Employee $employee, CarbonImmutable $from, CarbonImmutable $to): array
     {
         $days = $this->workingDays->between($employee, $from, $to);
-        $periods = $this->periods->ensurePeriods($employee);
+        $periods = $this->periods->ensurePeriods($employee, $to);
         $allocation = $this->allocate($days, $periods);
 
         return [
@@ -35,7 +35,7 @@ class VacationRequestService
             'working_days' => $days->count(),
             'calendar_days' => $from->diffInDays($to) + 1,
             'dates' => $days->map(fn (CarbonImmutable $date) => $date->toDateString())->all(),
-            'available_days' => round($this->availableDays($periods), 1),
+            'available_days' => round($this->availableDaysFor($periods, $from, $to), 1),
             'has_enough_balance' => $allocation !== null,
             'allocation' => $allocation === null ? [] : collect($allocation)
                 ->groupBy('period_id')
@@ -65,18 +65,19 @@ class VacationRequestService
                 ]);
             }
 
-            $periods = $employee->vacationPeriods()->oldestFirst()->lockForUpdate()->get();
-            $this->periods->ensurePeriods($employee);
-            $periods = $employee->vacationPeriods()->oldestFirst()->get();
+            $employee->vacationPeriods()->lockForUpdate()->get();
+            // Hasta el fin de la solicitud: una programada para el año que
+            // entra se carga al periodo que abra en esas fechas.
+            $periods = $this->periods->ensurePeriods($employee, $to);
 
             $allocation = $this->allocate($days, $periods);
 
             if ($allocation === null) {
                 throw ValidationException::withMessages([
                     'starts_on' => sprintf(
-                        'Saldo insuficiente: la solicitud consume %d día(s) hábil(es) y hay %s disponible(s).',
+                        'Saldo insuficiente: la solicitud consume %d día(s) hábil(es) y hay %s disponible(s) para esas fechas.',
                         $days->count(),
-                        rtrim(rtrim(number_format($this->availableDays($periods), 1), '0'), '.'),
+                        rtrim(rtrim(number_format($this->availableDaysFor($periods, $from, $to), 1), '0'), '.'),
                     ),
                 ]);
             }
@@ -157,8 +158,10 @@ class VacationRequestService
     }
 
     /**
-     * Reparte los días entre periodos, del más viejo al más nuevo, para que el
-     * saldo no venza mientras se usa el de un año reciente.
+     * Carga cada día al periodo en curso en esa fecha, no en la de hoy: así
+     * se programan vacaciones contra un periodo que todavía no abre, y una
+     * solicitud que cruza el aniversario se reparte entre los dos. Lo que
+     * sobró de periodos anteriores nunca entra aquí.
      *
      * Devuelve null si el saldo no alcanza.
      *
@@ -168,35 +171,35 @@ class VacationRequestService
      */
     private function allocate(Collection $days, Collection $periods): ?array
     {
-        $balances = $periods
-            ->filter(fn (VacationPeriod $period) => $period->is_available)
-            ->sortBy('year_number')
-            ->mapWithKeys(fn (VacationPeriod $period) => [$period->id => $period->remaining_days]);
+        $balances = $periods->mapWithKeys(fn (VacationPeriod $period) => [$period->id => $period->remaining_days]);
 
         $allocation = [];
 
         foreach ($days as $date) {
-            $periodId = $balances->search(fn (float $remaining) => $remaining >= 1);
+            $period = $periods->first(fn (VacationPeriod $period) => $period->coversDate($date));
 
-            if ($periodId === false) {
+            if ($period === null || $balances[$period->id] < 1) {
                 return null;
             }
 
-            $balances[$periodId] -= 1;
-            $allocation[] = ['date' => $date, 'period_id' => $periodId];
+            $balances[$period->id] -= 1;
+            $allocation[] = ['date' => $date, 'period_id' => $period->id];
         }
 
         return $allocation;
     }
 
     /**
+     * Saldo que alcanza a las fechas pedidas: la suma de los periodos en
+     * curso en algún día del rango.
+     *
      * @param  Collection<int, VacationPeriod>  $periods
      */
-    private function availableDays(Collection $periods): float
+    private function availableDaysFor(Collection $periods, CarbonImmutable $from, CarbonImmutable $to): float
     {
         return $periods
-            ->filter(fn (VacationPeriod $period) => $period->is_available)
-            ->sum(fn (VacationPeriod $period) => $period->remaining_days);
+            ->filter(fn (VacationPeriod $period) => $period->starts_on->lte($to) && $period->ends_on->gte($from))
+            ->sum(fn (VacationPeriod $period) => max($period->remaining_days, 0));
     }
 
     private function guardOverlap(Employee $employee, CarbonImmutable $from, CarbonImmutable $to): void

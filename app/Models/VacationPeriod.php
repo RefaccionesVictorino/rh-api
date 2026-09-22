@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -11,10 +12,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Periodo vacacional de un año de servicio, generado en cada aniversario de
  * la fecha de ingreso.
+ *
+ * Los días se ganan al cumplir el año de servicio y se piden durante el año
+ * siguiente: solo el periodo en curso admite solicitudes. Lo que sobra de
+ * periodos anteriores es saldo pendiente, no se solicita y la empresa decide
+ * si lo paga. `expires_on` (18 meses: artículo 81 más la prescripción del
+ * 516) solo informa si ese pendiente sigue siendo exigible.
  */
 class VacationPeriod extends Model
 {
-    /** El artículo 81 da seis meses tras el año de servicio para disfrutarlas. */
+    /** Meses de gracia del artículo 81 tras el año en que se disfrutan. */
     public const MONTHS_TO_EXPIRE = 6;
 
     protected $fillable = [
@@ -67,21 +74,45 @@ class VacationPeriod extends Model
         return Attribute::get(fn (): bool => $this->expires_on->isPast());
     }
 
-    /** Ya empezó y todavía no vence: de aquí sale el saldo que se puede pedir. */
+    /** El año en curso del empleado: el único periodo contra el que se solicita. */
+    protected function isCurrent(): Attribute
+    {
+        return Attribute::get(fn (): bool => $this->coversDate(today()));
+    }
+
+    /** En curso y con días: de aquí sale el saldo que se puede pedir. */
     protected function isAvailable(): Attribute
     {
-        return Attribute::get(
-            fn (): bool => ! $this->is_expired
-                && $this->starts_on->lte(today())
-                && $this->remaining_days > 0
-        );
+        return Attribute::get(fn (): bool => $this->is_current && $this->remaining_days > 0);
+    }
+
+    /** Ya cerró su año con días sin gozar: saldo pendiente, no solicitable. */
+    protected function isPending(): Attribute
+    {
+        return Attribute::get(fn (): bool => $this->ends_on->lt(today()) && $this->remaining_days > 0);
+    }
+
+    /** Todavía no abre: existe porque hay vacaciones programadas para cuando abra. */
+    protected function isFuture(): Attribute
+    {
+        return Attribute::get(fn (): bool => $this->starts_on->gt(today()));
+    }
+
+    /**
+     * Si un día de vacaciones se carga a este periodo: cae dentro de su año,
+     * sin importar la fecha de hoy. Los periodos no se traslapan, así que
+     * cada fecha tiene un solo periodo.
+     */
+    public function coversDate(CarbonInterface $date): bool
+    {
+        return $this->starts_on->lte($date) && $this->ends_on->gte($date);
     }
 
     public function scopeAvailable(Builder $query): Builder
     {
         return $query
             ->whereDate('starts_on', '<=', today()->toDateString())
-            ->whereDate('expires_on', '>=', today()->toDateString())
+            ->whereDate('ends_on', '>=', today()->toDateString())
             ->whereRaw('(entitled_days + adjustment_days) > taken_days');
     }
 

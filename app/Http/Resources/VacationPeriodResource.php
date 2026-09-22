@@ -29,8 +29,11 @@ class VacationPeriodResource extends JsonResource
             'granted_days' => $this->granted_days,
             'taken_days' => $this->taken_days,
             'remaining_days' => $this->remaining_days,
-            'is_expired' => $this->is_expired,
+            'is_current' => $this->is_current,
             'is_available' => $this->is_available,
+            'is_pending' => $this->is_pending,
+            'is_expired' => $this->is_expired,
+            'is_future' => $this->is_future,
         ];
     }
 }
