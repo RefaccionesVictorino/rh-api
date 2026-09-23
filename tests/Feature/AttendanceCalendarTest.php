@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\Holiday;
 use App\Models\HolidayRule;
 use App\Models\Shift;
+use App\Models\VacationRequest;
 use App\Services\AttendanceCalendarService;
 use App\Services\ExpectedSchedule;
 use Carbon\CarbonImmutable;
@@ -312,6 +313,50 @@ class AttendanceCalendarTest extends TestCase
 
         $this->assertSame(AttendanceCalendarService::STATUS_LATE, $day['status']);
         $this->assertSame(30, $day['late_minutes']);
+    }
+
+    public function test_an_approved_vacation_day_is_not_an_absence(): void
+    {
+        $this->vacationOn(self::THURSDAY, VacationRequest::APPROVED);
+
+        $calendar = app(AttendanceCalendarService::class)->build(
+            $this->employee,
+            CarbonImmutable::parse(self::THURSDAY),
+            CarbonImmutable::parse(self::FRIDAY),
+        );
+
+        $day = collect($calendar['days'])->firstWhere('date', self::THURSDAY);
+
+        $this->assertSame(AttendanceCalendarService::STATUS_VACATION, $day['status']);
+        $this->assertSame(1, $calendar['summary'][AttendanceCalendarService::STATUS_VACATION]);
+        $this->assertSame(1, $calendar['summary']['scheduled_days']);
+    }
+
+    public function test_a_pending_vacation_does_not_excuse_the_day(): void
+    {
+        $this->vacationOn(self::THURSDAY, VacationRequest::PENDING);
+
+        $this->assertSame(AttendanceCalendarService::STATUS_ABSENT, $this->dayOf(self::THURSDAY)['status']);
+    }
+
+    private function vacationOn(string $date, string $status): void
+    {
+        $period = $this->employee->vacationPeriods()->create([
+            'year_number' => 1,
+            'starts_on' => '2026-01-15',
+            'ends_on' => '2027-01-14',
+            'expires_on' => '2027-07-14',
+            'entitled_days' => 12,
+        ]);
+
+        $request = $this->employee->vacationRequests()->create([
+            'starts_on' => $date,
+            'ends_on' => $date,
+            'requested_days' => 1,
+            'status' => $status,
+        ]);
+
+        $request->days()->create(['vacation_period_id' => $period->id, 'date' => $date, 'days' => 1]);
     }
 
     public function test_summary_counts_holidays_and_lunch_overrun(): void

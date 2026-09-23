@@ -8,6 +8,8 @@ use App\Models\EmployeeShift;
 use App\Models\ScheduleOverride;
 use App\Models\Shift;
 use App\Models\ShiftDay;
+use App\Models\VacationRequest;
+use App\Models\VacationRequestDay;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -37,6 +39,8 @@ class AttendanceCalendarService
 
     public const STATUS_WORKED = 'worked';
 
+    public const STATUS_VACATION = 'vacation';
+
     /**
      * En un turno nocturno la salida cae en el calendario del día siguiente.
      * Se buscan checadas hasta este margen después de la hora de salida.
@@ -64,6 +68,14 @@ class AttendanceCalendarService
             ->betweenDates($from, $to)
             ->get()
             ->keyBy(fn (ScheduleOverride $override) => $override->date->toDateString());
+
+        $vacationDays = VacationRequestDay::query()
+            ->whereHas('request', fn ($query) => $query
+                ->where('employee_id', $employee->id)
+                ->where('status', VacationRequest::APPROVED))
+            ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
+            ->get()
+            ->keyBy(fn (VacationRequestDay $day) => $day->date->toDateString());
 
         // Un día más al final: la salida de un turno nocturno del último día
         // del rango queda en la madrugada siguiente.
@@ -105,7 +117,7 @@ class AttendanceCalendarService
                 }
             }
 
-            $days[] = $this->day($date, $today, $shift, $expected, $punches);
+            $days[] = $this->day($date, $today, $shift, $expected, $punches, $vacationDays->has($key));
         }
 
         return [
@@ -160,6 +172,7 @@ class AttendanceCalendarService
         ?Shift $shift,
         ExpectedSchedule $expected,
         Collection $punches,
+        bool $onVacation,
     ): array {
         $window = $expected->workWindow();
 
@@ -180,7 +193,11 @@ class AttendanceCalendarService
         $lateMinutes = 0;
         $breakOverrunMinutes = max(0, $breakMinutes - $expected->breakMinutes());
 
-        if (! $expected->hasShift()) {
+        // Las vacaciones aprobadas solo cubren días hábiles, así que mandan
+        // sobre el turno: no se esperaba checada.
+        if ($onVacation) {
+            $status = $punches->isEmpty() ? self::STATUS_VACATION : self::STATUS_WORKED;
+        } elseif (! $expected->hasShift()) {
             $status = $punches->isEmpty() ? self::STATUS_NO_SHIFT : self::STATUS_WORKED;
         } elseif ($expected->isRestDay()) {
             $status = $punches->isEmpty()
@@ -330,6 +347,7 @@ class AttendanceCalendarService
         $counts = array_fill_keys([
             self::STATUS_ON_TIME, self::STATUS_LATE, self::STATUS_ABSENT, self::STATUS_REST,
             self::STATUS_HOLIDAY, self::STATUS_NO_SHIFT, self::STATUS_PENDING, self::STATUS_WORKED,
+            self::STATUS_VACATION,
         ], 0);
 
         $workedMinutes = 0;
