@@ -250,4 +250,21 @@ class EmployeeRegistrationTest extends TestCase
     {
         $this->postJson('/api/employees', $this->payload())->assertUnauthorized();
     }
+
+    public function test_the_rfc_cannot_be_changed_once_registered(): void
+    {
+        $this->actingAsUserWith('empleados.editar');
+
+        $employee = Employee::factory()->create(['rfc' => 'VALS900101AB1']);
+
+        $this->putJson("/api/employees/{$employee->id}", ['rfc' => 'VALS900101AB2'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('rfc');
+
+        // Reenviar el mismo RFC con el resto del expediente no es un cambio.
+        $this->putJson("/api/employees/{$employee->id}", ['rfc' => ' vals900101ab1 ', 'name' => 'Sergio'])
+            ->assertOk();
+
+        $this->assertSame('VALS900101AB1', $employee->fresh()->rfc);
+    }
 }

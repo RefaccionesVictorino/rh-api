@@ -43,10 +43,19 @@ class TimeClockController extends Controller
         return response()->json(['data' => $devices]);
     }
 
-    /** Cambiar la sucursal solo afecta a las checadas que se registren después. */
+    /**
+     * Cambiar la sucursal solo afecta a las checadas que se registren después.
+     *
+     * Mientras estuvo inactivo el equipo no recibió altas; al reactivarlo se
+     * le reenvía el catálogo completo.
+     */
     public function updateDevice(UpdateTimeClockDeviceRequest $request, TimeClockDevice $device): JsonResponse
     {
         $device->update($request->validated());
+
+        if ($device->wasChanged('is_active') && $device->is_active) {
+            $this->commands->syncUsers($device);
+        }
 
         return response()->json([
             'data' => $this->devicePayload(
@@ -262,6 +271,15 @@ class TimeClockController extends Controller
     public function execute(ExecuteTimeClockCommandRequest $request, TimeClockDevice $device): JsonResponse
     {
         $data = $request->validated();
+
+        if ($data['action'] === 'sync_users') {
+            $queued = $this->commands->syncUsers($device);
+
+            return response()->json([
+                'data' => ['queued' => $queued],
+                'message' => "{$queued} usuario(s) en cola; el equipo los cargará en sus próximos sondeos.",
+            ], 202);
+        }
 
         $command = match ($data['action']) {
             'sync_time' => $this->commands->syncTime($device),

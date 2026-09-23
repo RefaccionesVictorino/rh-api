@@ -76,6 +76,43 @@ class TimeClockTest extends TestCase
         $this->assertNotNull(TimeClockDevice::first()->last_seen_at);
     }
 
+    public function test_a_new_device_receives_every_active_user_on_its_first_contact(): void
+    {
+        TimeClockUser::create(['pin' => 'VALS900101AB1', 'name' => 'Sergio Vargas']);
+        TimeClockUser::create(['pin' => 'GARA061007MD5', 'name' => 'Andrea García']);
+        TimeClockUser::create(['pin' => 'BAJA', 'name' => 'Dado de baja', 'is_active' => false]);
+
+        $this->get('/iclock/cdata?SN='.self::SN.'&options=all')->assertOk();
+
+        $commands = TimeClockDevice::first()->commands()->pluck('command');
+        $this->assertCount(2, $commands);
+        $this->assertStringContainsString("PIN=VALS900101AB1\tName=Sergio Vargas", $commands[0]);
+
+        // Los contactos siguientes no vuelven a encolar el catálogo.
+        $this->get('/iclock/getrequest?SN='.self::SN)->assertOk();
+        $this->assertSame(2, TimeClockCommand::count());
+    }
+
+    public function test_users_are_resent_on_demand_and_when_a_device_is_reactivated(): void
+    {
+        $this->actingAsUserWith('checador.administrar');
+
+        TimeClockUser::create(['pin' => '1001', 'name' => 'Ana']);
+        $device = TimeClockDevice::create(['serial_number' => self::SN, 'is_active' => false]);
+
+        $this->postJson("/api/time-clock/devices/{$device->id}/execute", ['action' => 'sync_users'])
+            ->assertStatus(202)
+            ->assertJsonPath('data.queued', 1);
+
+        $this->putJson("/api/time-clock/devices/{$device->id}", ['is_active' => true])->assertOk();
+
+        $this->assertSame(2, $device->commands()->where('type', 'user_upsert')->count());
+
+        // Guardar sin cambiar el estado no reenvía nada.
+        $this->putJson("/api/time-clock/devices/{$device->id}", ['name' => 'Mostrador'])->assertOk();
+        $this->assertSame(2, $device->commands()->count());
+    }
+
     public function test_unknown_serial_is_ignored_when_auto_register_is_off(): void
     {
         config(['time_clock.auto_register' => false]);

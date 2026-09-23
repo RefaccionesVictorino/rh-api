@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\Log;
  */
 class ZkPushProtocol
 {
+    public function __construct(private readonly ZkCommandBuilder $commands) {}
+
     /**
      * Respuesta al saludo inicial (GET /iclock/cdata?SN=x&options=all).
      *
@@ -236,6 +238,9 @@ class ZkPushProtocol
 
     /**
      * Busca el equipo por serial; lo da de alta si la configuración lo permite.
+     *
+     * Un equipo nuevo recibe de inmediato el catálogo de usuarios, para que
+     * los trabajadores ya existentes puedan enrolar su rostro en él.
      */
     public function resolveDevice(string $serialNumber): ?TimeClockDevice
     {
@@ -251,10 +256,14 @@ class ZkPushProtocol
             return null;
         }
 
-        return TimeClockDevice::create([
+        $device = TimeClockDevice::create([
             'serial_number' => $serialNumber,
             'name' => 'Terminal '.$serialNumber,
         ]);
+
+        $this->commands->syncUsers($device);
+
+        return $device;
     }
 
     /**

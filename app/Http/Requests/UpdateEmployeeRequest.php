@@ -51,11 +51,9 @@ class UpdateEmployeeRequest extends FormRequest
             'last_name' => ['sometimes', 'required', 'string', 'max:100'],
             'second_last_name' => ['sometimes', 'nullable', 'string', 'max:100'],
             'gender' => ['sometimes', 'required', Rule::in(self::GENDERS)],
-            'rfc' => [
-                'sometimes', 'required', 'string',
-                'regex:/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/',
-                Rule::unique('employees', 'rfc')->ignore($employee->id)->whereNull('deleted_at'),
-            ],
+            // El RFC es el PIN con el que checa: cambiarlo dejaría al trabajador
+            // sin reconocer en los equipos. Se acepta solo si viene igual.
+            'rfc' => ['sometimes', Rule::in([$employee->rfc])],
             'curp' => [
                 'sometimes', 'required', 'string', 'size:18',
                 'regex:/^[A-Z]{4}[0-9]{6}[HMX][A-Z]{5}[A-Z0-9][0-9]$/',
@@ -111,7 +109,7 @@ class UpdateEmployeeRequest extends FormRequest
             'gender.in' => 'Elige un género de la lista.',
             'marital_status.in' => 'Elige un estado civil de la lista.',
             'sub_department_id.exists' => 'La sub área no existe o fue dada de baja.',
-            'rfc.regex' => 'El RFC no tiene un formato válido.',
+            'rfc.in' => 'El RFC no se puede cambiar: es el PIN con el que el trabajador checa.',
             'curp.regex' => 'La CURP no tiene un formato válido.',
             'curp.size' => 'La CURP debe tener 18 caracteres.',
             'nss.regex' => 'El NSS debe tener 11 dígitos.',

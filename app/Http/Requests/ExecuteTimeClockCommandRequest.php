@@ -12,7 +12,7 @@ class ExecuteTimeClockCommandRequest extends FormRequest
      * arbitraria hacia el terminal desde el frontend.
      */
     public const ACTIONS = [
-        'sync_time', 'reboot', 'unlock_door', 'query_users',
+        'sync_time', 'sync_users', 'reboot', 'unlock_door', 'query_users',
         'query_punches', 'clear_log', 'message',
     ];
 

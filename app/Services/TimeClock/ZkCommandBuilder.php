@@ -40,6 +40,24 @@ class ZkCommandBuilder
         return $device->queueCommand('DATA UPDATE USERINFO '.implode("\t", $fields), 'user_upsert');
     }
 
+    /**
+     * Carga en el terminal todos los usuarios activos del catálogo.
+     *
+     * Se envían los datos guardados en `time_clock_users`, no los del
+     * expediente, para que el equipo quede igual que los demás. Repetirlo no
+     * daña nada: USERINFO actualiza por PIN y conserva el rostro enrolado.
+     *
+     * @return int Usuarios encolados.
+     */
+    public function syncUsers(TimeClockDevice $device): int
+    {
+        $users = TimeClockUser::where('is_active', true)->orderBy('id')->get();
+
+        $users->each(fn (TimeClockUser $user) => $this->upsertUser($device, $user));
+
+        return $users->count();
+    }
+
     /** Borra al usuario del terminal, incluidas sus plantillas biométricas. */
     public function deleteUser(TimeClockDevice $device, string $pin): TimeClockCommand
     {
