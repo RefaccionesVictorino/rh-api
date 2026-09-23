@@ -72,10 +72,12 @@ class AttendanceCalendarTest extends TestCase
      */
     private function dayOf(string $date): array
     {
+        $timezone = config('time_clock.timezone');
+
         $calendar = app(AttendanceCalendarService::class)->build(
             $this->employee,
-            CarbonImmutable::parse(self::THURSDAY),
-            CarbonImmutable::parse(self::FRIDAY),
+            CarbonImmutable::parse(self::THURSDAY, $timezone),
+            CarbonImmutable::parse(self::FRIDAY, $timezone),
         );
 
         return collect($calendar['days'])->firstWhere('date', $date);
@@ -132,6 +134,169 @@ class AttendanceCalendarTest extends TestCase
         $this->assertNull($day['break_out']);
         $this->assertSame(0, $day['break_minutes']);
         $this->assertSame(535, $day['worked_minutes']);
+    }
+
+    public function test_a_repeated_punch_within_three_minutes_is_ignored(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['09:02', AttendancePunch::TYPE_IN],
+            ['14:00', AttendancePunch::TYPE_OUT],
+            ['15:00', AttendancePunch::TYPE_IN],
+            ['18:00', AttendancePunch::TYPE_OUT],
+            ['18:03', AttendancePunch::TYPE_OUT],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame(['09:00', '14:00', '15:00', '18:00'], [
+            $day['first_in'], $day['break_out'], $day['break_in'], $day['last_out'],
+        ]);
+        $this->assertSame(480, $day['worked_minutes']);
+        $this->assertFalse($day['irregular_punches']);
+        $this->assertSame(
+            ['09:02', '18:03'],
+            collect($day['punches'])->where('is_duplicate', true)->pluck('time')->all(),
+        );
+    }
+
+    public function test_a_punch_after_the_window_is_not_a_duplicate(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['09:04', AttendancePunch::TYPE_OUT],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame('09:04', $day['last_out']);
+        $this->assertFalse(collect($day['punches'])->contains('is_duplicate', true));
+    }
+
+    public function test_ending_on_an_entry_means_the_exit_is_missing(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['14:00', AttendancePunch::TYPE_OUT],
+            ['15:00', AttendancePunch::TYPE_IN],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame(['14:00', '15:00'], [$day['break_out'], $day['break_in']]);
+        $this->assertNull($day['last_out']);
+        $this->assertTrue($day['missing_out']);
+        $this->assertFalse($day['irregular_punches']);
+    }
+
+    public function test_every_absence_during_the_day_is_discounted(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['11:00', AttendancePunch::TYPE_OUT],
+            ['11:30', AttendancePunch::TYPE_IN],
+            ['14:00', AttendancePunch::TYPE_OUT],
+            ['15:00', AttendancePunch::TYPE_IN],
+            ['18:00', AttendancePunch::TYPE_OUT],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame(['14:00', '15:00'], [$day['break_out'], $day['break_in']]);
+        $this->assertSame(90, $day['break_minutes']);
+        $this->assertSame(450, $day['worked_minutes']);
+    }
+
+    public function test_an_early_lunch_is_still_the_lunch(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['10:00', AttendancePunch::TYPE_OUT],
+            ['10:15', AttendancePunch::TYPE_IN],
+            ['13:10', AttendancePunch::TYPE_OUT],
+            ['13:55', AttendancePunch::TYPE_IN],
+            ['18:00', AttendancePunch::TYPE_OUT],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame(['13:10', '13:55'], [$day['break_out'], $day['break_in']]);
+        $this->assertSame(60, $day['break_minutes']);
+    }
+
+    public function test_an_exit_during_lunch_time_today_is_a_lunch_in_progress(): void
+    {
+        $this->travelTo(CarbonImmutable::parse(self::THURSDAY.' 14:30', config('time_clock.timezone')));
+
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['14:05', AttendancePunch::TYPE_OUT],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame('14:05', $day['break_out']);
+        $this->assertNull($day['break_in']);
+        $this->assertNull($day['last_out']);
+        $this->assertFalse($day['missing_out']);
+    }
+
+    public function test_a_past_day_ending_at_lunch_time_is_missing_the_return(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['14:05', AttendancePunch::TYPE_OUT],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame('14:05', $day['break_out']);
+        $this->assertNull($day['last_out']);
+        $this->assertTrue($day['missing_out']);
+    }
+
+    public function test_an_exit_outside_lunch_time_is_the_exit(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['13:55', AttendancePunch::TYPE_OUT],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame('13:55', $day['last_out']);
+        $this->assertNull($day['break_out']);
+    }
+
+    public function test_punches_with_the_wrong_button_are_flagged_for_review(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['18:00', AttendancePunch::TYPE_IN],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertTrue($day['irregular_punches']);
+        $this->assertSame(['09:00', '18:00'], [$day['first_in'], $day['last_out']]);
+        $this->assertFalse($day['missing_out']);
+    }
+
+    public function test_overtime_punches_do_not_alter_the_workday(): void
+    {
+        $this->punch(self::THURSDAY, [
+            ['09:00', AttendancePunch::TYPE_IN],
+            ['18:00', AttendancePunch::TYPE_OUT],
+            ['18:30', AttendancePunch::TYPE_OVERTIME_IN],
+            ['20:00', AttendancePunch::TYPE_OVERTIME_OUT],
+        ]);
+
+        $day = $this->dayOf(self::THURSDAY);
+
+        $this->assertSame('18:00', $day['last_out']);
+        $this->assertNull($day['break_out']);
+        $this->assertFalse($day['irregular_punches']);
+        $this->assertCount(4, $day['punches']);
     }
 
     public function test_a_rest_holiday_replaces_the_shift(): void

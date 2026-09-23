@@ -47,12 +47,13 @@ class HolidayCalendar
                 }
 
                 $date = $rule->dateFor($year);
+                $key = $date?->toDateString();
 
-                if ($date === null || $date->lt($from) || $date->gt($to)) {
+                // Se compara la fecha sin hora: la regla genera medianoche en la
+                // zona de la app y el rango puede venir en la del checador.
+                if ($key === null || $key < $from->toDateString() || $key > $to->toDateString()) {
                     continue;
                 }
-
-                $key = $date->toDateString();
 
                 if (! isset($calendar[$key])) {
                     $calendar[$key] = $this->asHoliday($rule, $key);

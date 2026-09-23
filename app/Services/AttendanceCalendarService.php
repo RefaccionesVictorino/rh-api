@@ -47,6 +47,12 @@ class AttendanceCalendarService
      */
     private const NIGHT_EXIT_GRACE_MINUTES = 120;
 
+    /**
+     * Quien no está seguro de que el equipo leyó su huella vuelve a checar a
+     * los pocos segundos. Dentro de esta ventana solo cuenta la primera.
+     */
+    private const DUPLICATE_WINDOW_SECONDS = 180;
+
     public function __construct(private readonly HolidayCalendar $holidays) {}
 
     /**
@@ -176,15 +182,16 @@ class AttendanceCalendarService
     ): array {
         $window = $expected->workWindow();
 
-        $pairs = $this->pairPunches($punches);
+        [$workdayPunches, $duplicates] = $this->workdayPunches($punches);
+
+        $pairs = $this->pairPunches($workdayPunches, $expected->breakWindow(), $date);
         $firstIn = $pairs['first_in'];
         $lastOut = $pairs['last_out'];
 
         $inMinutes = $firstIn === null ? null : $this->minutesOfDay($firstIn);
-        $outMinutes = $lastOut === null ? null : $this->minutesOfDay($lastOut)
-            + ($lastOut->punched_at->toDateString() === $date->toDateString() ? 0 : ShiftDay::MINUTES_PER_DAY);
+        $outMinutes = $lastOut === null ? null : $this->minutesOnShiftAxis($lastOut, $date);
 
-        $breakMinutes = $this->breakMinutes($pairs['break_out'], $pairs['break_in']);
+        $breakMinutes = $pairs['break_minutes'];
 
         $worked = $inMinutes !== null && $outMinutes !== null && $outMinutes > $inMinutes
             ? $outMinutes - $inMinutes - $breakMinutes
@@ -203,7 +210,7 @@ class AttendanceCalendarService
             $status = $punches->isEmpty()
                 ? ($expected->holiday !== null ? self::STATUS_HOLIDAY : self::STATUS_REST)
                 : self::STATUS_WORKED;
-        } elseif ($punches->isEmpty()) {
+        } elseif ($firstIn === null) {
             $status = $date->lt($today) ? self::STATUS_ABSENT : self::STATUS_PENDING;
         } else {
             $lateMinutes = max(0, $inMinutes - $window[0]);
@@ -259,12 +266,14 @@ class AttendanceCalendarService
             'break_overrun_minutes' => $breakOverrunMinutes,
             // Entró pero no hay salida registrada y el día ya pasó.
             'missing_out' => $isScheduled && $lastOut === null && $date->lt($today),
+            'irregular_punches' => $pairs['irregular'],
             'punches' => $punches->map(fn (AttendancePunch $punch) => [
                 'id' => $punch->id,
                 'punched_at' => $punch->punched_at->format('Y-m-d H:i:s'),
                 'time' => $punch->punched_at->format('H:i'),
                 'punch_type' => $punch->punch_type,
                 'punch_type_label' => $punch->type_label,
+                'is_duplicate' => isset($duplicates[$punch->id]),
                 'verify_mode_label' => $punch->verify_mode_label,
                 'source' => $punch->source,
                 'device' => $punch->device?->name,
@@ -274,54 +283,156 @@ class AttendanceCalendarService
     }
 
     /**
-     * Reparte las checadas del día en entrada, comida y salida.
-     *
-     * El equipo manda entrada y salida alternadas sin distinguir la comida, así
-     * que el par intermedio (una salida seguida de otra entrada) es la comida y
-     * la última salida es la de casa.
+     * Checadas que cuentan para la jornada normal: sin las de horas extra y
+     * sin las repetidas dentro de la ventana de duplicado.
      *
      * @param  Collection<int, AttendancePunch>  $punches
-     * @return array{first_in: ?AttendancePunch, break_out: ?AttendancePunch, break_in: ?AttendancePunch, last_out: ?AttendancePunch}
+     * @return array{0: Collection<int, AttendancePunch>, 1: array<int, true>}
      */
-    private function pairPunches(Collection $punches): array
+    private function workdayPunches(Collection $punches): array
     {
-        $empty = ['first_in' => null, 'break_out' => null, 'break_in' => null, 'last_out' => null];
+        $kept = collect();
+        $duplicates = [];
 
-        if ($punches->isEmpty()) {
-            return $empty;
+        foreach ($punches->sortBy(fn (AttendancePunch $p) => $p->punched_at)->values() as $punch) {
+            if (in_array($punch->punch_type, [AttendancePunch::TYPE_OVERTIME_IN, AttendancePunch::TYPE_OVERTIME_OUT], true)) {
+                continue;
+            }
+
+            $previous = $kept->last();
+
+            if ($previous !== null && $previous->punched_at->diffInSeconds($punch->punched_at) <= self::DUPLICATE_WINDOW_SECONDS) {
+                $duplicates[$punch->id] = true;
+
+                continue;
+            }
+
+            $kept->push($punch);
         }
 
-        $explicitBreakOut = $punches->first(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_BREAK_OUT);
+        return [$kept, $duplicates];
+    }
 
-        if ($explicitBreakOut !== null) {
-            return [
-                'first_in' => $punches->first(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_IN)
-                    ?? $punches->first(),
-                'break_out' => $explicitBreakOut,
-                'break_in' => $punches->first(
-                    fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_BREAK_IN
-                        && $p->punched_at->gt($explicitBreakOut->punched_at)
-                ),
-                'last_out' => $punches->last(fn (AttendancePunch $p) => $p->punch_type === AttendancePunch::TYPE_OUT),
-            ];
+    /**
+     * Reparte las checadas de la jornada en entrada, comida y salida.
+     *
+     * El checador solo ofrece entrada y salida, así que la comida se marca como
+     * una salida seguida de otra entrada. Si los tipos alternan se confía en
+     * ellos: cada hueco salida→entrada es tiempo fuera y terminar en entrada
+     * significa que no checó la salida. Si no alternan, alguien se equivocó de
+     * botón: se reparte por posición y el día queda marcado para revisión.
+     *
+     * Con horario de comida en el turno, la comida es el hueco que más se
+     * empalma con él (o el más cercano, porque suelen salir y volver antes), y
+     * una última salida dentro de ese horario, sin regreso, es salida a comer y
+     * no salida a casa.
+     *
+     * @param  Collection<int, AttendancePunch>  $punches  En orden cronológico.
+     * @param  array{0: int, 1: int}|null  $breakWindow
+     * @return array{first_in: ?AttendancePunch, break_out: ?AttendancePunch, break_in: ?AttendancePunch, last_out: ?AttendancePunch, break_minutes: int, irregular: bool}
+     */
+    private function pairPunches(Collection $punches, ?array $breakWindow, CarbonImmutable $date): array
+    {
+        $result = [
+            'first_in' => $punches->first(),
+            'break_out' => null,
+            'break_in' => null,
+            'last_out' => null,
+            'break_minutes' => 0,
+            'irregular' => false,
+        ];
+
+        $count = $punches->count();
+
+        if ($count === 0) {
+            return $result;
         }
 
-        $ordered = $punches->sortBy(fn (AttendancePunch $p) => $p->punched_at)->values();
+        if (! $this->alternates($punches)) {
+            $result['irregular'] = true;
+            $result['last_out'] = $count > 1 ? $punches->last() : null;
 
-        $result = $empty;
-        $result['first_in'] = $ordered->first();
+            if ($count >= 4) {
+                $result['break_out'] = $punches[1];
+                $result['break_in'] = $punches[2];
+                $result['break_minutes'] = $this->breakMinutes($punches[1], $punches[2]);
+            }
 
-        if ($ordered->count() > 1) {
-            $result['last_out'] = $ordered->last();
+            return $result;
         }
 
-        // Cuatro checadas: entrada, salida a comer, regreso, salida.
-        if ($ordered->count() >= 4) {
-            $result['break_out'] = $ordered[1];
-            $result['break_in'] = $ordered[2];
+        $lastOut = $count % 2 === 0 ? $punches->last() : null;
+
+        // Todo el tiempo fuera se descuenta de lo trabajado, no solo la comida.
+        $gaps = [];
+
+        for ($i = 1; $i + 1 < $count; $i += 2) {
+            $gaps[] = [$punches[$i], $punches[$i + 1]];
+            $result['break_minutes'] += $this->breakMinutes($punches[$i], $punches[$i + 1]);
         }
+
+        if ($gaps !== []) {
+            [$result['break_out'], $result['break_in']] = $breakWindow === null
+                ? $gaps[0]
+                : $this->lunchGap($gaps, $breakWindow, $date);
+        } elseif ($lastOut !== null && $breakWindow !== null && $this->isWithin($lastOut, $breakWindow, $date)) {
+            $result['break_out'] = $lastOut;
+            $lastOut = null;
+        }
+
+        $result['last_out'] = $lastOut;
 
         return $result;
+    }
+
+    /**
+     * El hueco que más se empalma con el horario de comida; si ninguno lo toca,
+     * el más cercano.
+     *
+     * @param  non-empty-list<array{0: AttendancePunch, 1: AttendancePunch}>  $gaps
+     * @param  array{0: int, 1: int}  $breakWindow
+     * @return array{0: AttendancePunch, 1: AttendancePunch}
+     */
+    private function lunchGap(array $gaps, array $breakWindow, CarbonImmutable $date): array
+    {
+        return collect($gaps)->sortBy(function (array $gap) use ($breakWindow, $date) {
+            $out = $this->minutesOnShiftAxis($gap[0], $date);
+            $in = $this->minutesOnShiftAxis($gap[1], $date);
+
+            $overlap = max(0, min($in, $breakWindow[1]) - max($out, $breakWindow[0]));
+            $distance = max(0, $breakWindow[0] - $in, $out - $breakWindow[1]);
+
+            return [-$overlap, $distance];
+        })->first();
+    }
+
+    /**
+     * @param  array{0: int, 1: int}  $window
+     */
+    private function isWithin(AttendancePunch $punch, array $window, CarbonImmutable $date): bool
+    {
+        $minutes = $this->minutesOnShiftAxis($punch, $date);
+
+        return $minutes >= $window[0] && $minutes <= $window[1];
+    }
+
+    /** Minutos desde la medianoche del día del turno; la madrugada siguiente pasa de 1440. */
+    private function minutesOnShiftAxis(AttendancePunch $punch, CarbonImmutable $date): int
+    {
+        return $this->minutesOfDay($punch)
+            + ($punch->punched_at->toDateString() === $date->toDateString() ? 0 : ShiftDay::MINUTES_PER_DAY);
+    }
+
+    /**
+     * @param  Collection<int, AttendancePunch>  $punches
+     */
+    private function alternates(Collection $punches): bool
+    {
+        return $punches->every(fn (AttendancePunch $punch, int $index) => in_array(
+            $punch->punch_type,
+            [AttendancePunch::TYPE_IN, AttendancePunch::TYPE_BREAK_IN],
+            true,
+        ) === ($index % 2 === 0));
     }
 
     private function breakMinutes(?AttendancePunch $out, ?AttendancePunch $in): int
