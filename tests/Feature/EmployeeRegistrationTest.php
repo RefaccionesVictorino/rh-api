@@ -64,6 +64,15 @@ class EmployeeRegistrationTest extends TestCase
             'municipality' => 'Guadalajara',
             'postal_code' => '44100',
             'hire_date' => '2026-09-01',
+            'emergency_contacts' => [
+                [
+                    'name' => 'María Luna',
+                    'relationship' => 'Madre',
+                    'phone' => '3311112222',
+                    'has_whatsapp' => true,
+                    'email' => null,
+                ],
+            ],
         ], $overrides);
     }
 
@@ -179,7 +188,7 @@ class EmployeeRegistrationTest extends TestCase
                 'name', 'last_name', 'gender', 'rfc', 'curp', 'nss',
                 'birth_country', 'marital_status', 'birthdate', 'work_phone',
                 'personal_phone', 'personal_email', 'address', 'municipality',
-                'postal_code', 'hire_date',
+                'postal_code', 'hire_date', 'emergency_contacts',
             ]);
 
         $this->postJson('/api/employees', $this->payload([
@@ -266,5 +275,85 @@ class EmployeeRegistrationTest extends TestCase
             ->assertOk();
 
         $this->assertSame('VALS900101AB1', $employee->fresh()->rfc);
+    }
+
+    public function test_it_stores_the_emergency_contacts_with_the_employee(): void
+    {
+        $this->actingAsHr();
+
+        $this->postJson('/api/employees', $this->payload())
+            ->assertCreated()
+            ->assertJsonPath('data.emergency_contacts.0.name', 'María Luna')
+            ->assertJsonPath('data.emergency_contacts.0.has_whatsapp', true);
+
+        $this->assertDatabaseHas('employee_emergency_contacts', [
+            'employee_id' => Employee::firstWhere('rfc', 'VALS900101AB1')->id,
+            'relationship' => 'Madre',
+            'phone' => '3311112222',
+            'email' => null,
+        ]);
+    }
+
+    public function test_it_requires_at_least_one_valid_emergency_contact(): void
+    {
+        $this->actingAsHr();
+
+        $this->postJson('/api/employees', $this->payload(['emergency_contacts' => []]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('emergency_contacts');
+
+        $this->postJson('/api/employees', $this->payload([
+            'emergency_contacts' => [[
+                'name' => '',
+                'relationship' => 'Vecino',
+                'phone_country_code' => '+52',
+                'phone' => '',
+                'email' => 'no-es-correo',
+            ]],
+        ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'emergency_contacts.0.name',
+                'emergency_contacts.0.relationship',
+                'emergency_contacts.0.phone_country_code',
+                'emergency_contacts.0.phone',
+                'emergency_contacts.0.email',
+            ]);
+
+        $this->assertDatabaseCount('employees', 0);
+    }
+
+    public function test_editing_replaces_the_emergency_contacts(): void
+    {
+        $this->actingAsUserWith('empleados.editar');
+
+        $employee = Employee::factory()->create();
+        $employee->syncEmergencyContacts([
+            ['name' => 'Anterior', 'relationship' => 'Padre', 'phone' => '3300000000'],
+        ]);
+        $previous = $employee->emergencyContacts()->sole();
+
+        $this->putJson("/api/employees/{$employee->id}", [
+            'emergency_contacts' => [
+                ['name' => 'Ana', 'relationship' => 'Cónyuge', 'phone' => '3311111111', 'has_whatsapp' => true],
+                ['name' => 'Luis', 'relationship' => 'Hermano(a)', 'phone_country_code' => '1', 'phone' => '2135550100', 'email' => 'luis@correo.com'],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonCount(2, 'data.emergency_contacts')
+            ->assertJsonPath('data.emergency_contacts.0.phone_country_code', '52')
+            ->assertJsonPath('data.emergency_contacts.1.phone_country_code', '1')
+            ->assertJsonPath('data.emergency_contacts.1.email', 'luis@correo.com');
+
+        $this->assertSoftDeleted($previous);
+
+        $this->putJson("/api/employees/{$employee->id}", ['emergency_contacts' => []])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('emergency_contacts');
+
+        // Una edición que no trae la lista no toca los contactos guardados.
+        $this->putJson("/api/employees/{$employee->id}", ['name' => 'Sergio'])->assertOk();
+
+        $this->assertSame(2, $employee->emergencyContacts()->count());
     }
 }

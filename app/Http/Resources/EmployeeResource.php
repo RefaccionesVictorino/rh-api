@@ -47,6 +47,7 @@ class EmployeeResource extends JsonResource
             ),
             // PIN con el que checa en el reloj; nulo si RH no lo ha ligado.
             'time_clock_pin' => $this->whenLoaded('timeClockUser', fn () => $this->timeClockUser?->pin),
+            'emergency_contacts' => EmployeeEmergencyContactResource::collection($this->whenLoaded('emergencyContacts')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

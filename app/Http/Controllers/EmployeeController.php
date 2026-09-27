@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Services\EmployeeRegistrationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class EmployeeController extends Controller
 {
@@ -18,6 +19,7 @@ class EmployeeController extends Controller
         'subDepartment.department',
         'currentShiftAssignment.shift.days',
         'timeClockUser',
+        'emergencyContacts',
     ];
 
     /** Listado paginado con búsqueda y ordenamiento por columna. */
@@ -47,7 +49,10 @@ class EmployeeController extends Controller
         StoreEmployeeRequest $request,
         EmployeeRegistrationService $registration,
     ): JsonResponse {
-        ['employee' => $employee, 'devices' => $devices] = $registration->register($request->payload());
+        ['employee' => $employee, 'devices' => $devices] = $registration->register(
+            $request->payload(),
+            $request->emergencyContacts(),
+        );
 
         return EmployeeResource::make($employee->load(self::DETAIL_RELATIONS))
             ->additional(['message' => $registration->syncMessage($devices)])
@@ -62,7 +67,14 @@ class EmployeeController extends Controller
 
     public function update(UpdateEmployeeRequest $request, Employee $employee): EmployeeResource
     {
-        $employee->update($request->payload());
+        DB::transaction(function () use ($request, $employee): void {
+            $employee->update($request->payload());
+
+            $contacts = $request->emergencyContacts();
+            if ($contacts !== null) {
+                $employee->syncEmergencyContacts($contacts);
+            }
+        });
 
         return EmployeeResource::make($employee->refresh()->load(self::DETAIL_RELATIONS));
     }

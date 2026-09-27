@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesEmergencyContacts;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreEmployeeRequest extends FormRequest
 {
+    use ValidatesEmergencyContacts;
+
     public function authorize(): bool
     {
         return true;
@@ -82,6 +85,7 @@ class StoreEmployeeRequest extends FormRequest
                 'nullable', 'integer',
                 Rule::exists('sub_departments', 'id')->whereNull('deleted_at'),
             ],
+            ...$this->emergencyContactRules(['required']),
         ];
     }
 
@@ -92,7 +96,7 @@ class StoreEmployeeRequest extends FormRequest
      */
     public function payload(): array
     {
-        $data = $this->validated();
+        $data = $this->safe()->except('emergency_contacts');
 
         if (($data['work_phone'] ?? null) === null) {
             $data['work_phone'] = '';
@@ -118,6 +122,7 @@ class StoreEmployeeRequest extends FormRequest
             'postal_code.regex' => 'El código postal debe tener 5 dígitos.',
             'photo_url.prohibited' => 'La foto se agrega desde el expediente, una vez creado el registro.',
             'birthdate.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
+            ...$this->emergencyContactMessages(),
         ];
     }
 
@@ -146,6 +151,7 @@ class StoreEmployeeRequest extends FormRequest
             'photo_url' => 'foto',
             'hire_date' => 'fecha de ingreso',
             'sub_department_id' => 'sub área',
+            ...$this->emergencyContactAttributes(),
         ];
     }
 }

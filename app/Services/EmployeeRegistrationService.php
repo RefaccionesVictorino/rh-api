@@ -25,12 +25,14 @@ class EmployeeRegistrationService
 
     /**
      * @param  array<string, mixed>  $attributes  Datos ya validados del expediente.
+     * @param  array<int, array<string, mixed>>  $emergencyContacts
      * @return array{employee: Employee, devices: int} `devices` = terminales a las que se encoló el alta.
      */
-    public function register(array $attributes): array
+    public function register(array $attributes, array $emergencyContacts): array
     {
-        return DB::transaction(function () use ($attributes): array {
+        return DB::transaction(function () use ($attributes, $emergencyContacts): array {
             $employee = Employee::create($attributes);
+            $employee->syncEmergencyContacts($emergencyContacts);
 
             $user = TimeClockUser::create([
                 // El RFC es el PIN con el que checa. Cabe en la columna (20) y

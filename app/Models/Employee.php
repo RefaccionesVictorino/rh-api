@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Employee extends Model
 {
@@ -78,6 +79,28 @@ class Employee extends Model
     public function subDepartment(): BelongsTo
     {
         return $this->belongsTo(SubDepartment::class);
+    }
+
+    public function emergencyContacts(): HasMany
+    {
+        return $this->hasMany(EmployeeEmergencyContact::class)->orderBy('id');
+    }
+
+    /**
+     * Reemplaza los contactos por los recibidos: el formulario siempre manda
+     * la lista completa, así que no hace falta conciliar renglón por renglón.
+     * Los anteriores quedan con baja lógica.
+     *
+     * @param  array<int, array<string, mixed>>  $contacts
+     */
+    public function syncEmergencyContacts(array $contacts): void
+    {
+        DB::transaction(function () use ($contacts): void {
+            $this->emergencyContacts()->delete();
+            $this->emergencyContacts()->createMany($contacts);
+        });
+
+        $this->unsetRelation('emergencyContacts');
     }
 
     public function scheduleOverrides(): HasMany

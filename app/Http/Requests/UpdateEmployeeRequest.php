@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesEmergencyContacts;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateEmployeeRequest extends FormRequest
 {
+    use ValidatesEmergencyContacts;
+
     public const GENDERS = ['masculino', 'femenino', 'no_binario'];
 
     public const MARITAL_STATUSES = [
@@ -81,6 +84,7 @@ class UpdateEmployeeRequest extends FormRequest
                 'sometimes', 'nullable', 'integer',
                 Rule::exists('sub_departments', 'id')->whereNull('deleted_at'),
             ],
+            ...$this->emergencyContactRules(['sometimes', 'required']),
         ];
     }
 
@@ -91,7 +95,7 @@ class UpdateEmployeeRequest extends FormRequest
      */
     public function payload(): array
     {
-        $data = $this->validated();
+        $data = $this->safe()->except('emergency_contacts');
 
         if (array_key_exists('work_phone', $data) && $data['work_phone'] === null) {
             $data['work_phone'] = '';
@@ -116,6 +120,7 @@ class UpdateEmployeeRequest extends FormRequest
             'postal_code.regex' => 'El código postal debe tener 5 dígitos.',
             'photo_url.prohibited' => 'La foto se cambia desde el expediente, no con este formulario.',
             'birthdate.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
+            ...$this->emergencyContactMessages(),
         ];
     }
 
@@ -144,6 +149,7 @@ class UpdateEmployeeRequest extends FormRequest
             'photo_url' => 'foto',
             'hire_date' => 'fecha de ingreso',
             'sub_department_id' => 'sub área',
+            ...$this->emergencyContactAttributes(),
         ];
     }
 }
