@@ -22,6 +22,12 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::group([], __DIR__.'/../routes/iclock.php');
         },
     )
+    // El panel se autentica con token de Sanctum, no con sesión web: la
+    // autorización de canales privados queda en /api/broadcasting/auth.
+    ->withBroadcasting(
+        __DIR__.'/../routes/channels.php',
+        ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum']],
+    )
     ->withMiddleware(function (Middleware $middleware): void {
         // Sin login web: los invitados de la API reciben 401 JSON, no una redirección.
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/');

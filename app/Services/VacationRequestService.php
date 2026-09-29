@@ -3,11 +3,15 @@
 namespace App\Services;
 
 use App\Models\Employee;
+use App\Models\User;
 use App\Models\VacationPeriod;
 use App\Models\VacationRequest;
+use App\Notifications\VacationRequestSubmitted;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 
 class VacationRequestService
@@ -68,7 +72,7 @@ class VacationRequestService
         ?string $comments,
         ?int $requestedBy,
     ): VacationRequest {
-        return DB::transaction(function () use ($employee, $from, $to, $comments, $requestedBy): VacationRequest {
+        $request = DB::transaction(function () use ($employee, $from, $to, $comments, $requestedBy): VacationRequest {
             $this->guardOverlap($employee, $from, $to);
 
             $days = $this->workingDays->between($employee, $from, $to);
@@ -117,6 +121,30 @@ class VacationRequestService
 
             return $request;
         });
+
+        $this->notifyApprovers($request, $requestedBy);
+
+        return $request;
+    }
+
+    /**
+     * Fuera de la transacción: el aviso sale por la cola y no debe existir si
+     * la solicitud no se guardó. Quien la capturó no se avisa a sí mismo.
+     */
+    private function notifyApprovers(VacationRequest $request, ?int $requestedBy): void
+    {
+        // No se usa el scope permission() de Spatie: lanza excepción si el
+        // permiso no existe, y un alta no debe fallar por falta de destinatarios.
+        $hasPermission = fn (Builder $q) => $q->where('name', 'vacaciones.autorizar');
+
+        $approvers = User::query()
+            ->where(fn (Builder $q) => $q
+                ->whereHas('permissions', $hasPermission)
+                ->orWhereHas('roles.permissions', $hasPermission))
+            ->when($requestedBy, fn (Builder $q, int $id) => $q->whereKeyNot($id))
+            ->get();
+
+        Notification::send($approvers, new VacationRequestSubmitted($request));
     }
 
     /**

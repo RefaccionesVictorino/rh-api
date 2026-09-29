@@ -9,6 +9,7 @@ use App\Http\Controllers\EmployeeShiftController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\HolidayRuleController;
 use App\Http\Controllers\LocationController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ScheduleOverrideController;
 use App\Http\Controllers\SelfServiceVacationController;
 use App\Http\Controllers\ShiftController;
@@ -33,6 +34,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/logout-all', [AuthController::class, 'logoutAll']);
+
+    // Sin permiso: cada usuario administra solo su propia bandeja.
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
 
     Route::get('/employees', [EmployeeController::class, 'index'])
         ->middleware('permission:empleados.ver');
