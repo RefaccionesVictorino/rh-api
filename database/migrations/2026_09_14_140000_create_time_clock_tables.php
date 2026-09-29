@@ -29,6 +29,12 @@ return new class extends Migration
             $table->string('ip_address', 45)->nullable();
             $table->boolean('is_active')->default(true);
 
+            // Última ventana de inactividad. El equipo guarda las checadas que
+            // no pudo entregar y las manda al reconectarse; las que caen en esta
+            // ventana se descartan aunque lleguen ya reactivado.
+            $table->timestamp('deactivated_at')->nullable();
+            $table->timestamp('reactivated_at')->nullable();
+
             // Marcas de agua del protocolo: el equipo pregunta desde qué punto
             // reenviar. Se guardan tal cual las manda el terminal (string).
             $table->string('att_log_stamp')->default('0');

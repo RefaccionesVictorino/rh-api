@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -27,8 +28,43 @@ class TimeClockDevice extends Model
     {
         return [
             'is_active' => 'boolean',
+            'deactivated_at' => 'datetime',
+            'reactivated_at' => 'datetime',
             'last_seen_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::updating(function (TimeClockDevice $device) {
+            if (! $device->isDirty('is_active')) {
+                return;
+            }
+
+            if ($device->is_active) {
+                $device->reactivated_at = now();
+            } else {
+                $device->deactivated_at = now();
+                $device->reactivated_at = null;
+            }
+        });
+    }
+
+    /**
+     * Si una checada marcada a esa hora cuenta: el equipo debe estar activo y
+     * la hora no puede caer en su última ventana de inactividad.
+     */
+    public function acceptsPunchAt(CarbonInterface $punchedAt): bool
+    {
+        if (! $this->is_active) {
+            return false;
+        }
+
+        if ($this->deactivated_at === null || $this->reactivated_at === null) {
+            return true;
+        }
+
+        return $punchedAt->lt($this->deactivated_at) || $punchedAt->gte($this->reactivated_at);
     }
 
     /**

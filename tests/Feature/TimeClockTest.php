@@ -155,6 +155,40 @@ class TimeClockTest extends TestCase
         $this->assertSame('101', TimeClockDevice::first()->att_log_stamp);
     }
 
+    public function test_punches_made_while_the_device_was_inactive_are_discarded(): void
+    {
+        $this->travelTo(now()->parse('2026-09-14 10:00', 'America/Mexico_City'));
+
+        $device = TimeClockDevice::create(['serial_number' => self::SN]);
+        $device->update(['is_active' => false]);
+
+        // Inactivo: se acusa y avanza la marca de agua, pero no se guarda nada.
+        $this->postAttlog($this->attlog([
+            ['1001', '2026-09-14 10:05:00', '0', '15', '0', '0'],
+        ]))->assertOk()->assertSee('OK: 0');
+
+        $this->assertDatabaseCount('attendance_punches', 0);
+        $this->assertSame('100', $device->fresh()->att_log_stamp);
+
+        $this->travelTo(now()->parse('2026-09-14 12:00', 'America/Mexico_City'));
+        $device->update(['is_active' => true]);
+
+        // Ya reactivado llegan las que el equipo tenía guardadas: solo cuentan
+        // las de antes de desactivarlo y las de después de reactivarlo.
+        $this->postAttlog($this->attlog([
+            ['1001', '2026-09-14 09:00:00', '0', '15', '0', '0'],
+            ['1001', '2026-09-14 11:00:00', '1', '15', '0', '0'],
+            ['1001', '2026-09-14 12:30:00', '0', '15', '0', '0'],
+        ]), '101')->assertOk()->assertSee('OK: 2');
+
+        $this->assertSame(
+            ['2026-09-14 09:00:00', '2026-09-14 12:30:00'],
+            AttendancePunch::orderBy('punched_at')->get()
+                ->map(fn (AttendancePunch $punch) => $punch->punched_at->format('Y-m-d H:i:s'))
+                ->all(),
+        );
+    }
+
     public function test_delivers_pending_commands_and_records_their_confirmation(): void
     {
         $device = TimeClockDevice::create(['serial_number' => self::SN]);

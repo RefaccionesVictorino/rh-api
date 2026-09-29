@@ -85,6 +85,12 @@ class ZkPushProtocol
                 continue;
             }
 
+            // Se descarta pero el lote se acusa igual, para que el equipo
+            // avance su marca de agua y no la reenvíe al reactivarse.
+            if (! $device->acceptsPunchAt($punchedAt)) {
+                continue;
+            }
+
             // Un lote suele traer muchas checadas del mismo PIN: se resuelve el
             // empleado una sola vez por PIN.
             if (! array_key_exists($pin, $employeeIdsByPin)) {
