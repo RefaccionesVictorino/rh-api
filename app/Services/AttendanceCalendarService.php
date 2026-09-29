@@ -88,7 +88,7 @@ class AttendanceCalendarService
         $punchesByDate = AttendancePunch::query()
             ->forEmployee($employee->id)
             ->betweenDates($from->toDateString(), $to->addDay()->toDateString())
-            ->with('device:id,name')
+            ->with(['device:id,name', 'createdBy:id,name'])
             ->orderBy('punched_at')
             ->get()
             ->groupBy(fn (AttendancePunch $punch) => $punch->punched_at->toDateString());
@@ -278,6 +278,7 @@ class AttendanceCalendarService
                 'source' => $punch->source,
                 'device' => $punch->device?->name,
                 'notes' => $punch->notes,
+                'created_by' => $punch->createdBy?->name,
             ])->values()->all(),
         ];
     }

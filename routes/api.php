@@ -12,6 +12,7 @@ use App\Http\Controllers\LocationController;
 use App\Http\Controllers\ScheduleOverrideController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SubDepartmentController;
+use App\Http\Controllers\TimeClock\ManualPunchController;
 use App\Http\Controllers\TimeClock\TimeClockController;
 use App\Http\Controllers\VacationBalanceController;
 use App\Http\Controllers\VacationRequestController;
@@ -169,5 +170,9 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/users', [TimeClockController::class, 'storeUser']);
             Route::delete('/users/{user}', [TimeClockController::class, 'destroyUser']);
         });
+
+        // No pasa por el equipo: se guarda al momento y responde 201.
+        Route::post('/punches', [ManualPunchController::class, 'store'])
+            ->middleware('permission:checador.extraoficial');
     });
 });

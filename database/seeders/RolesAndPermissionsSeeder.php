@@ -25,7 +25,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'turnos' => ['ver', 'crear', 'editar', 'eliminar', 'asignar'],
         'festivos' => ['ver', 'crear', 'editar', 'eliminar'],
         'vacaciones' => ['ver', 'solicitar', 'autorizar', 'configurar'],
-        'checador' => ['ver', 'administrar'],
+        'checador' => ['ver', 'administrar', 'extraoficial'],
     ];
 
     public function run(): void

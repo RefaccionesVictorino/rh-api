@@ -86,6 +86,7 @@ class TimeClockController extends Controller
             ->with([
                 'device:id,name,serial_number',
                 'location:id,name,code',
+                'createdBy:id,name',
                 'employee:id,name,last_name,second_last_name,sub_department_id',
                 'employee.subDepartment:id,name,department_id',
                 'employee.subDepartment.department:id,name,color',
@@ -146,6 +147,8 @@ class TimeClockController extends Controller
                 'punch_type_label' => $punch->type_label,
                 'verify_mode_label' => $punch->verify_mode_label,
                 'source' => $punch->source,
+                'notes' => $punch->notes,
+                'created_by' => $punch->createdBy?->only(['id', 'name']),
                 'device' => $punch->device?->name,
                 'location_id' => $punch->location_id,
                 'location' => $punch->location?->name,

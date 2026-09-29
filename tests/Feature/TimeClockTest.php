@@ -399,4 +399,84 @@ class TimeClockTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.shift.name', 'Vespertino');
     }
+
+    public function test_unofficial_punch_requires_its_own_permission(): void
+    {
+        $this->actingAsUserWith('checador.ver', 'checador.administrar');
+
+        $employee = Employee::factory()->create();
+
+        $this->postJson('/api/time-clock/punches', [
+            'employee_id' => $employee->id, 'punched_at' => '2026-09-14 09:00',
+            'punch_type' => AttendancePunch::TYPE_IN, 'notes' => 'Olvidó checar',
+        ])->assertForbidden();
+
+        $this->assertDatabaseCount('attendance_punches', 0);
+    }
+
+    public function test_records_an_unofficial_punch_with_its_author_and_reason(): void
+    {
+        $this->travelTo(now()->parse('2026-09-15 12:00', 'America/Mexico_City'));
+
+        $author = $this->actingAsUserWith('checador.ver', 'checador.extraoficial');
+
+        $employee = Employee::factory()->create();
+        TimeClockUser::create(['pin' => '1001', 'name' => 'Juan', 'employee_id' => $employee->id]);
+
+        $this->postJson('/api/time-clock/punches', [
+            'employee_id' => $employee->id, 'punched_at' => '2026-09-14 09:05',
+            'punch_type' => AttendancePunch::TYPE_IN, 'notes' => 'Olvidó checar al llegar',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.source', 'manual')
+            ->assertJsonPath('data.created_by.name', $author->name);
+
+        $this->assertDatabaseHas('attendance_punches', [
+            'employee_id' => $employee->id,
+            'device_id' => null,
+            'pin' => '1001',
+            'punched_at' => '2026-09-14 09:05:00',
+            'source' => 'manual',
+            'created_by' => $author->id,
+            'notes' => 'Olvidó checar al llegar',
+        ]);
+
+        $this->getJson('/api/time-clock/punches?from=2026-09-14&to=2026-09-14')
+            ->assertOk()
+            ->assertJsonPath('data.0.source', 'manual')
+            ->assertJsonPath('data.0.notes', 'Olvidó checar al llegar')
+            ->assertJsonPath('data.0.created_by.id', $author->id)
+            ->assertJsonPath('data.0.device', null);
+    }
+
+    public function test_rejects_unofficial_punches_in_the_future_or_repeated(): void
+    {
+        $this->travelTo(now()->parse('2026-09-15 12:00', 'America/Mexico_City'));
+
+        $this->actingAsUserWith('checador.extraoficial');
+
+        $employee = Employee::factory()->create();
+        $punch = [
+            'employee_id' => $employee->id, 'punched_at' => '2026-09-15 11:59',
+            'punch_type' => AttendancePunch::TYPE_IN, 'notes' => 'Equipo sin luz',
+        ];
+
+        $this->postJson('/api/time-clock/punches', ['punched_at' => '2026-09-15 12:30'] + $punch)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['punched_at']);
+
+        $this->postJson('/api/time-clock/punches', ['notes' => ''] + $punch)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['notes']);
+
+        $this->postJson('/api/time-clock/punches', $punch)->assertCreated();
+
+        $this->postJson('/api/time-clock/punches', $punch)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['punched_at']);
+
+        // A la misma hora pero de otro tipo sí procede.
+        $this->postJson('/api/time-clock/punches', ['punch_type' => AttendancePunch::TYPE_OUT] + $punch)
+            ->assertCreated();
+    }
 }

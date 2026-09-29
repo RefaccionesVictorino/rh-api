@@ -45,7 +45,10 @@ class AttendancePunch extends Model
         15 => 'Rostro',
     ];
 
-    public const SOURCES = ['device', 'app', 'web', 'manual'];
+    /** Checada extraoficial: la captura alguien con permiso a nombre del empleado. */
+    public const SOURCE_MANUAL = 'manual';
+
+    public const SOURCES = ['device', 'app', 'web', self::SOURCE_MANUAL];
 
     protected $fillable = [
         'employee_id', 'device_id', 'location_id', 'pin', 'punched_at', 'punch_type',
