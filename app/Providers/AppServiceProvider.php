@@ -30,5 +30,11 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(10)->by($email.'|'.$request->ip());
         });
+
+        // Por número de checador y no por IP, por la misma razón que el login.
+        // Los intentos fallidos se limitan aparte, en IdentifyEmployeeRequest.
+        RateLimiter::for('self-service', function (Request $request) {
+            return Limit::perMinute(30)->by(strtoupper(preg_replace('/\s+/', '', (string) $request->input('pin'))));
+        });
     }
 }

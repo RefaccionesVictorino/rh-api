@@ -10,6 +10,7 @@ use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\HolidayRuleController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\ScheduleOverrideController;
+use App\Http\Controllers\SelfServiceVacationController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SubDepartmentController;
 use App\Http\Controllers\TimeClock\ManualPunchController;
@@ -19,6 +20,14 @@ use App\Http\Controllers\VacationRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+
+// Portal del trabajador: sin sesión, se identifica en cada petición con su
+// número de checador y fecha de nacimiento (ver IdentifyEmployeeRequest).
+Route::prefix('self-service/vacations')->middleware('throttle:self-service')->group(function () {
+    Route::post('/lookup', [SelfServiceVacationController::class, 'show']);
+    Route::post('/preview', [SelfServiceVacationController::class, 'preview']);
+    Route::post('/requests', [SelfServiceVacationController::class, 'store']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
