@@ -29,6 +29,8 @@ class VacationRequest extends Model
         'employee_id',
         'starts_on',
         'ends_on',
+        'requested_starts_on',
+        'requested_ends_on',
         'requested_days',
         'status',
         'comments',
@@ -36,6 +38,7 @@ class VacationRequest extends Model
         'reviewed_by',
         'reviewed_at',
         'rejection_reason',
+        'reschedule_reason',
     ];
 
     protected $attributes = ['status' => self::PENDING];
@@ -45,6 +48,8 @@ class VacationRequest extends Model
         return [
             'starts_on' => 'date:Y-m-d',
             'ends_on' => 'date:Y-m-d',
+            'requested_starts_on' => 'date:Y-m-d',
+            'requested_ends_on' => 'date:Y-m-d',
             'requested_days' => 'float',
             'reviewed_at' => 'datetime',
         ];

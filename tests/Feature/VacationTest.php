@@ -765,28 +765,167 @@ class VacationTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_a_request_needs_a_month_of_notice(): void
+    public function test_a_request_needs_no_advance_notice(): void
     {
         $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar');
         $employee = $this->employee(yearsAgo: 2);
 
-        // Hoy es 2026-09-16: el 15 de octubre queda un día corto.
+        // Hoy es 2026-09-16.
         $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
-            'starts_on' => '2026-10-15', 'ends_on' => '2026-10-16',
+            'starts_on' => '2026-09-17', 'ends_on' => '2026-09-18',
+        ])->assertCreated();
+    }
+
+    public function test_a_request_cannot_start_in_the_past(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar');
+        $employee = $this->employee(yearsAgo: 2);
+
+        $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-09-15', 'ends_on' => '2026-09-18',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['starts_on']);
 
         $this->assertDatabaseCount('vacation_requests', 0);
     }
 
-    public function test_a_request_exactly_a_month_ahead_is_accepted(): void
+    public function test_approving_with_other_dates_keeps_the_requested_ones(): void
     {
-        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar');
-        $employee = $this->employee(yearsAgo: 2);
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        $response = $this->postJson("/api/vacation-requests/{$id}/approve", [
+            'starts_on' => '2026-11-16',
+            'ends_on' => '2026-11-21',
+            'reschedule_reason' => 'Su jefe sale la semana anterior.',
+        ])->assertOk()
+            ->assertJsonPath('data.status', VacationRequest::APPROVED)
+            ->assertJsonPath('data.starts_on', '2026-11-16')
+            ->assertJsonPath('data.ends_on', '2026-11-21')
+            ->assertJsonPath('data.requested_starts_on', '2026-11-09')
+            ->assertJsonPath('data.requested_ends_on', '2026-11-13')
+            ->assertJsonPath('data.requested_days', 6)
+            ->assertJsonPath('data.reschedule_reason', 'Su jefe sale la semana anterior.');
+
+        $this->assertSame(
+            ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21'],
+            $response->json('data.dates'),
+        );
+
+        $this->getJson("/api/employees/{$employee->id}/vacation-balance")
+            ->assertOk()
+            ->assertJsonPath('data.taken_days', 6)
+            ->assertJsonPath('data.available_days', 6);
+    }
+
+    public function test_approving_with_the_same_dates_is_not_a_reschedule(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        $this->postJson("/api/vacation-requests/{$id}/approve", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->assertOk()
+            ->assertJsonPath('data.status', VacationRequest::APPROVED)
+            ->assertJsonPath('data.requested_starts_on', null)
+            ->assertJsonPath('data.reschedule_reason', null);
+    }
+
+    public function test_rescheduling_needs_a_reason(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        $this->postJson("/api/vacation-requests/{$id}/approve", [
+            'starts_on' => '2026-11-16', 'ends_on' => '2026-11-20',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['reschedule_reason']);
+
+        $this->assertDatabaseHas('vacation_requests', ['id' => $id, 'status' => VacationRequest::PENDING]);
+    }
+
+    public function test_rescheduling_cannot_overlap_another_request_of_the_employee(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
 
         $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
-            'starts_on' => '2026-10-16', 'ends_on' => '2026-10-17',
+            'starts_on' => '2026-12-07', 'ends_on' => '2026-12-09',
         ])->assertCreated();
+
+        $this->postJson("/api/vacation-requests/{$id}/approve", [
+            'starts_on' => '2026-12-08',
+            'ends_on' => '2026-12-10',
+            'reschedule_reason' => 'Cobertura.',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['starts_on']);
+    }
+
+    public function test_rescheduling_beyond_the_balance_leaves_the_request_untouched(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        // 17 días hábiles contra 12 de saldo.
+        $this->postJson("/api/vacation-requests/{$id}/approve", [
+            'starts_on' => '2026-11-02',
+            'ends_on' => '2026-11-20',
+            'reschedule_reason' => 'Cobertura.',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['starts_on']);
+
+        $request = VacationRequest::findOrFail($id);
+
+        $this->assertSame(VacationRequest::PENDING, $request->status);
+        $this->assertSame('2026-11-09', $request->starts_on->toDateString());
+        $this->assertNull($request->requested_starts_on);
+
+        $this->getJson("/api/employees/{$employee->id}/vacation-balance")
+            ->assertOk()
+            ->assertJsonPath('data.available_days', 7);
+    }
+
+    public function test_preview_can_ignore_the_days_held_by_a_request(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar');
+        $employee = $this->employee(yearsAgo: 1);
+
+        // Dos semanas de lunes a sábado agotan los 12 días del periodo.
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-21',
+        ])->json('data.id');
+
+        $this->postJson("/api/employees/{$employee->id}/vacation-requests/preview", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-21',
+        ])->assertOk()
+            ->assertJsonPath('data.has_enough_balance', false)
+            ->assertJsonPath('data.available_days', 0);
+
+        $this->postJson("/api/employees/{$employee->id}/vacation-requests/preview", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-21', 'ignore_request_id' => $id,
+        ])->assertOk()
+            ->assertJsonPath('data.has_enough_balance', true)
+            ->assertJsonPath('data.available_days', 12);
     }
 
     /**

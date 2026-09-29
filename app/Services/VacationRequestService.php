@@ -23,10 +23,24 @@ class VacationRequestService
      *
      * @return array<string, mixed>
      */
-    public function preview(Employee $employee, CarbonImmutable $from, CarbonImmutable $to): array
-    {
+    public function preview(
+        Employee $employee,
+        CarbonImmutable $from,
+        CarbonImmutable $to,
+        ?VacationRequest $ignoring = null,
+    ): array {
         $days = $this->workingDays->between($employee, $from, $to);
         $periods = $this->periods->ensurePeriods($employee, $to);
+
+        // Al reprogramar, los días que ya aparta esa solicitud vuelven a estar
+        // disponibles: se descuentan en memoria, sin tocar el periodo.
+        if ($ignoring !== null) {
+            $heldDays = $ignoring->days()->get()->groupBy('vacation_period_id')->map->sum('days');
+            $periods->each(function (VacationPeriod $period) use ($heldDays): void {
+                $period->taken_days -= $heldDays->get($period->id, 0);
+            });
+        }
+
         $allocation = $this->allocate($days, $periods);
 
         return [
@@ -105,17 +119,104 @@ class VacationRequestService
         });
     }
 
-    public function approve(VacationRequest $request, ?int $reviewedBy): VacationRequest
-    {
+    /**
+     * Con fechas distintas a las pedidas, RH reprograma al aprobar: se
+     * conservan las originales y los días se vuelven a cargar contra el saldo.
+     */
+    public function approve(
+        VacationRequest $request,
+        ?int $reviewedBy,
+        ?CarbonImmutable $from = null,
+        ?CarbonImmutable $to = null,
+        ?string $rescheduleReason = null,
+    ): VacationRequest {
         $this->guardPending($request);
 
+        return DB::transaction(function () use ($request, $reviewedBy, $from, $to, $rescheduleReason): VacationRequest {
+            if ($from !== null && $to !== null && $this->changesDates($request, $from, $to)) {
+                $this->reschedule($request, $from, $to, $rescheduleReason);
+            }
+
+            $request->update([
+                'status' => VacationRequest::APPROVED,
+                'reviewed_by' => $reviewedBy,
+                'reviewed_at' => now(),
+            ]);
+
+            return $request;
+        });
+    }
+
+    private function changesDates(VacationRequest $request, CarbonImmutable $from, CarbonImmutable $to): bool
+    {
+        return $from->toDateString() !== $request->starts_on->toDateString()
+            || $to->toDateString() !== $request->ends_on->toDateString();
+    }
+
+    private function reschedule(
+        VacationRequest $request,
+        CarbonImmutable $from,
+        CarbonImmutable $to,
+        ?string $reason,
+    ): void {
+        $employee = $request->employee;
+
+        $this->guardOverlap($employee, $from, $to, exceptId: $request->id);
+
+        $days = $this->workingDays->between($employee, $from, $to);
+
+        if ($days->isEmpty()) {
+            throw ValidationException::withMessages([
+                'starts_on' => 'El periodo no incluye ningún día laborable para este empleado.',
+            ]);
+        }
+
+        $employee->vacationPeriods()->lockForUpdate()->get();
+
+        // Los días que apartaba se liberan antes de reasignar; si el saldo no
+        // alcanza, la excepción revierte la transacción y vuelven a su lugar.
+        $this->releaseDays($request);
+
+        $periods = $this->periods->ensurePeriods($employee, $to);
+        $allocation = $this->allocate($days, $periods);
+
+        if ($allocation === null) {
+            throw ValidationException::withMessages([
+                'starts_on' => sprintf(
+                    'Saldo insuficiente: las nuevas fechas consumen %d día(s) hábil(es) y hay %s disponible(s).',
+                    $days->count(),
+                    rtrim(rtrim(number_format($this->availableDaysFor($periods, $from, $to), 1), '0'), '.'),
+                ),
+            ]);
+        }
+
         $request->update([
-            'status' => VacationRequest::APPROVED,
-            'reviewed_by' => $reviewedBy,
-            'reviewed_at' => now(),
+            'requested_starts_on' => $request->starts_on,
+            'requested_ends_on' => $request->ends_on,
+            'starts_on' => $from,
+            'ends_on' => $to,
+            'requested_days' => $days->count(),
+            'reschedule_reason' => $reason,
         ]);
 
-        return $request;
+        foreach ($allocation as $entry) {
+            $request->days()->create([
+                'vacation_period_id' => $entry['period_id'],
+                'date' => $entry['date'],
+                'days' => 1,
+            ]);
+        }
+
+        $this->refreshPeriods($request);
+    }
+
+    private function releaseDays(VacationRequest $request): void
+    {
+        $periodIds = $request->days()->distinct()->pluck('vacation_period_id');
+
+        $request->days()->delete();
+
+        VacationPeriod::whereIn('id', $periodIds)->get()->each->recalculateTakenDays();
     }
 
     public function reject(VacationRequest $request, ?int $reviewedBy, ?string $reason): VacationRequest
@@ -202,10 +303,15 @@ class VacationRequestService
             ->sum(fn (VacationPeriod $period) => max($period->remaining_days, 0));
     }
 
-    private function guardOverlap(Employee $employee, CarbonImmutable $from, CarbonImmutable $to): void
-    {
+    private function guardOverlap(
+        Employee $employee,
+        CarbonImmutable $from,
+        CarbonImmutable $to,
+        ?int $exceptId = null,
+    ): void {
         $overlapping = $employee->vacationRequests()
             ->consuming()
+            ->when($exceptId !== null, fn ($q) => $q->whereKeyNot($exceptId))
             ->whereDate('starts_on', '<=', $to->toDateString())
             ->whereDate('ends_on', '>=', $from->toDateString())
             ->first();

@@ -50,6 +50,11 @@ return new class extends Migration
             $table->date('starts_on');
             $table->date('ends_on');
 
+            // Lo que pidió el empleado cuando RH aprobó otras fechas; nulos si
+            // se aprobó tal cual.
+            $table->date('requested_starts_on')->nullable();
+            $table->date('requested_ends_on')->nullable();
+
             // Días hábiles según el turno del empleado; medio día es válido.
             $table->decimal('requested_days', 5, 1);
 
@@ -59,6 +64,7 @@ return new class extends Migration
             $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamp('reviewed_at')->nullable();
             $table->string('rejection_reason')->nullable();
+            $table->string('reschedule_reason')->nullable();
             $table->timestamps();
 
             $table->index(['employee_id', 'status']);

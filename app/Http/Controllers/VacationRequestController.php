@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ApproveVacationRequestRequest;
 use App\Http\Requests\IndexVacationRequestRequest;
 use App\Http\Requests\StoreVacationRequestRequest;
 use App\Http\Resources\VacationRequestResource;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
 
 class VacationRequestController extends Controller
 {
@@ -83,13 +85,19 @@ class VacationRequestController extends Controller
     }
 
     /**
-     * Costo en días hábiles del rango, antes de enviar la solicitud.
+     * Costo en días hábiles del rango, antes de enviar la solicitud. Al
+     * reprogramar una pendiente, `ignore_request_id` la deja fuera del saldo.
      */
     public function preview(Request $request, Employee $employee): JsonResponse
     {
         $data = $request->validate([
             'starts_on' => ['required', 'date_format:Y-m-d'],
             'ends_on' => ['required', 'date_format:Y-m-d', 'after_or_equal:starts_on'],
+            'ignore_request_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('vacation_requests', 'id')->where('employee_id', $employee->id),
+            ],
         ]);
 
         return response()->json([
@@ -97,6 +105,7 @@ class VacationRequestController extends Controller
                 $employee,
                 CarbonImmutable::parse($data['starts_on']),
                 CarbonImmutable::parse($data['ends_on']),
+                isset($data['ignore_request_id']) ? VacationRequest::find($data['ignore_request_id']) : null,
             ),
         ]);
     }
@@ -157,9 +166,19 @@ class VacationRequestController extends Controller
         )->response()->setStatusCode(201);
     }
 
-    public function approve(Request $request, VacationRequest $vacationRequest): VacationRequestResource
-    {
-        $this->requests->approve($vacationRequest, $request->user()?->id);
+    public function approve(
+        ApproveVacationRequestRequest $request,
+        VacationRequest $vacationRequest,
+    ): VacationRequestResource {
+        [$from, $to] = $request->range() ?? [null, null];
+
+        $this->requests->approve(
+            $vacationRequest,
+            $request->user()?->id,
+            $from,
+            $to,
+            $request->validated('reschedule_reason'),
+        );
 
         return VacationRequestResource::make(
             $vacationRequest->refresh()->load(['employee', 'reviewedBy', 'days'])
