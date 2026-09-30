@@ -34,6 +34,19 @@ return new class extends Migration
             $table->softDeletes();
             $table->timestamps();
         });
+
+        // Va aquí y no en create_users_table: esa corre antes de que exista
+        // employees. Nullable porque el administrador puede no ser trabajador;
+        // sin unique por la misma razón que el correo del usuario.
+        Schema::table('users', function (Blueprint $table) {
+            $table->foreignId('employee_id')
+                ->nullable()
+                ->after('id')
+                ->constrained('employees')
+                // Restrict y no null: desvincular en silencio dejaría al usuario
+                // sin trabajador, es decir, sin recorte de alcance.
+                ->restrictOnDelete();
+        });
     }
 
     /**
@@ -41,6 +54,11 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::table('users', function (Blueprint $table) {
+            $table->dropForeign(['employee_id']);
+            $table->dropColumn('employee_id');
+        });
+
         Schema::dropIfExists('employees');
     }
 };

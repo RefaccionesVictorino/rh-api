@@ -8,6 +8,7 @@ use App\Http\Requests\UpdateEmployeeRequest;
 use App\Http\Resources\EmployeeResource;
 use App\Models\Employee;
 use App\Services\EmployeeRegistrationService;
+use App\Services\OrgChartScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
@@ -22,10 +23,13 @@ class EmployeeController extends Controller
         'emergencyContacts',
     ];
 
-    /** Listado paginado con búsqueda y ordenamiento por columna. */
-    public function index(IndexEmployeeRequest $request): AnonymousResourceCollection
+    /**
+     * Listado paginado con búsqueda y ordenamiento por columna. Un jefe de
+     * área solo ve a quienes dependen de él.
+     */
+    public function index(IndexEmployeeRequest $request, OrgChartScope $scope): AnonymousResourceCollection
     {
-        $employees = Employee::query()
+        $employees = $scope->constrain(Employee::query(), $request->user())
             ->search($request->search())
             ->with('currentShiftAssignment.shift')
             ->orderBy($request->sortBy(), $request->sortDir())

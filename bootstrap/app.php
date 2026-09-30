@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureSystemAccess;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -26,7 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
     // autorización de canales privados queda en /api/broadcasting/auth.
     ->withBroadcasting(
         __DIR__.'/../routes/channels.php',
-        ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum']],
+        ['prefix' => 'api', 'middleware' => ['api', 'auth:sanctum', 'system.access']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Sin login web: los invitados de la API reciben 401 JSON, no una redirección.
@@ -36,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
+            'system.access' => EnsureSystemAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

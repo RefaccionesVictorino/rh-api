@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * @mixin Employee
@@ -48,6 +49,13 @@ class EmployeeResource extends JsonResource
             // PIN con el que checa en el reloj; nulo si RH no lo ha ligado.
             'time_clock_pin' => $this->whenLoaded('timeClockUser', fn () => $this->timeClockUser?->pin),
             'emergency_contacts' => EmployeeEmergencyContactResource::collection($this->whenLoaded('emergencyContacts')),
+            // Solo en las rutas de un empleado concreto: en el listado costaría
+            // recorrer el organigrama por cada renglón.
+            'can_assign_shift' => $this->when(
+                $request->route('employee') instanceof Employee,
+                fn (): bool => (bool) $request->user()?->checkPermissionTo('turnos.asignar')
+                    && Gate::allows('assign-shift', $this->resource),
+            ),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

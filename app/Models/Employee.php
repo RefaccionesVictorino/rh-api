@@ -128,6 +128,12 @@ class Employee extends Model
         return (int) $this->hire_date->diffInYears($date ?? today());
     }
 
+    /** Cuenta de acceso al sistema; a lo más una vigente por empleado. */
+    public function user(): HasOne
+    {
+        return $this->hasOne(User::class);
+    }
+
     /** Usuario con el que checa en el reloj; a lo más uno por empleado. */
     public function timeClockUser(): HasOne
     {

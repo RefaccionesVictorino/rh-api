@@ -14,10 +14,14 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->string('email')->unique();
+            // Índice y no unique: con baja lógica, la unicidad se valida solo
+            // contra los usuarios vigentes (StoreUserRequest), para que un
+            // correo dado de baja pueda volver a darse de alta.
+            $table->string('email')->index();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
+            $table->softDeletes();
             $table->timestamps();
         });
 

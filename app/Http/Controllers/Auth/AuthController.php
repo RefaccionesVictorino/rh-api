@@ -37,6 +37,14 @@ class AuthController extends Controller
             ]);
         }
 
+        // Después de comprobar la contraseña: antes, el mensaje delataría qué
+        // correos tienen cuenta.
+        if (! $user->hasSystemAccess()) {
+            return response()->json([
+                'message' => 'Tu cuenta no tiene acceso: el trabajador vinculado está dado de baja o no tiene área asignada.',
+            ], 403);
+        }
+
         $remember = (bool) ($credentials['remember'] ?? false);
         $expiresAt = $remember
             ? now()->addDays(self::REMEMBER_DAYS)

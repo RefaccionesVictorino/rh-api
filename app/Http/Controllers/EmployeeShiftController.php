@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Gate;
 
 class EmployeeShiftController extends Controller
 {
@@ -107,6 +108,8 @@ class EmployeeShiftController extends Controller
      */
     public function destroy(EmployeeShift $shiftAssignment): JsonResponse
     {
+        Gate::authorize('assign-shift', $shiftAssignment->employee);
+
         $shiftAssignment->delete();
 
         return response()->json(status: 204);

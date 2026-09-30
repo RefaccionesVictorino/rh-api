@@ -16,6 +16,7 @@ use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\SubDepartmentController;
 use App\Http\Controllers\TimeClock\ManualPunchController;
 use App\Http\Controllers\TimeClock\TimeClockController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\VacationBalanceController;
 use App\Http\Controllers\VacationRequestController;
 use Illuminate\Support\Facades\Route;
@@ -30,7 +31,7 @@ Route::prefix('self-service/vacations')->middleware('throttle:self-service')->gr
     Route::post('/requests', [SelfServiceVacationController::class, 'store']);
 });
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/logout-all', [AuthController::class, 'logoutAll']);
@@ -39,6 +40,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+
+    // Antes del apiResource, por la misma razón que /departments/chart.
+    Route::get('/users/linkable-employees', [UserController::class, 'linkableEmployees'])
+        ->middleware('permission:usuarios.crear|usuarios.editar');
+
+    Route::apiResource('users', UserController::class)
+        ->middlewareFor(['index', 'show'], 'permission:usuarios.ver')
+        ->middlewareFor('store', 'permission:usuarios.crear')
+        ->middlewareFor('update', 'permission:usuarios.editar')
+        ->middlewareFor('destroy', 'permission:usuarios.eliminar');
 
     Route::get('/employees', [EmployeeController::class, 'index'])
         ->middleware('permission:empleados.ver');

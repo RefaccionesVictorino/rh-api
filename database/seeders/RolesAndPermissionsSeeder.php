@@ -57,6 +57,14 @@ class RolesAndPermissionsSeeder extends Seeder
             'checador.ver', 'checador.administrar',
         ]);
 
+        // Sus asignaciones de turno se recortan a la parte del organigrama que
+        // cuelga de su trabajador (ver OrgChartScope).
+        $areaManager = Role::firstOrCreate(['name' => 'jefe_area', 'guard_name' => 'web']);
+        $areaManager->syncPermissions([
+            'empleados.ver',
+            'turnos.ver', 'turnos.crear', 'turnos.asignar',
+        ]);
+
         Role::firstOrCreate(['name' => 'empleado', 'guard_name' => 'web']);
 
         $user = User::firstOrCreate(

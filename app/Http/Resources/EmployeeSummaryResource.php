@@ -26,6 +26,7 @@ class EmployeeSummaryResource extends JsonResource
             // Firmada al vuelo, igual que en EmployeeResource: el bucket es
             // privado y la URL cruda no se puede cargar desde el navegador.
             'photo_url' => $this->signed_photo_url,
+            'sub_department' => SubDepartmentResource::make($this->whenLoaded('subDepartment')),
         ];
     }
 }
