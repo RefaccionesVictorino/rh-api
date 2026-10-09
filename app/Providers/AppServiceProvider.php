@@ -64,5 +64,8 @@ class AppServiceProvider extends ServiceProvider
 
             return $employee;
         });
+
+        // Sin recorte de organigrama: reactivar es exclusivo de quien no lo tiene.
+        Route::bind('terminated_employee', fn (string $id): Employee => Employee::onlyTrashed()->findOrFail($id));
     }
 }

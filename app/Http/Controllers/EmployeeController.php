@@ -8,8 +8,11 @@ use App\Http\Requests\UpdateEmployeeRequest;
 use App\Http\Resources\EmployeeResource;
 use App\Models\Employee;
 use App\Services\EmployeeRegistrationService;
+use App\Services\EmployeeTerminationService;
 use App\Services\OrgChartScope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 
@@ -30,6 +33,7 @@ class EmployeeController extends Controller
     public function index(IndexEmployeeRequest $request, OrgChartScope $scope): AnonymousResourceCollection
     {
         $employees = $scope->constrain(Employee::query(), $request->user())
+            ->when($request->onlyTerminated(), fn (Builder $query) => $query->onlyTrashed()->with('terminatedBy'))
             ->search($request->search())
             ->with('currentShiftAssignment.shift')
             ->orderBy($request->sortBy(), $request->sortDir())
@@ -81,5 +85,36 @@ class EmployeeController extends Controller
         });
 
         return EmployeeResource::make($employee->refresh()->load(self::DETAIL_RELATIONS));
+    }
+
+    public function destroy(
+        Request $request,
+        Employee $employee,
+        EmployeeTerminationService $termination,
+    ): JsonResponse {
+        $data = $request->validate([
+            'termination_reason' => ['required', 'string', 'max:255'],
+        ]);
+
+        if ($request->user()->employee_id === $employee->id) {
+            return response()->json([
+                'message' => 'No puedes darte de baja a ti mismo.',
+            ], 422);
+        }
+
+        $devices = $termination->terminate($employee, $data['termination_reason'], $request->user()->id);
+
+        return response()->json([
+            'message' => $termination->terminationMessage($devices),
+        ]);
+    }
+
+    public function restore(Employee $terminatedEmployee, EmployeeTerminationService $termination): JsonResponse
+    {
+        $devices = $termination->restore($terminatedEmployee);
+
+        return EmployeeResource::make($terminatedEmployee->load(self::DETAIL_RELATIONS))
+            ->additional(['message' => $termination->restoreMessage($devices)])
+            ->response();
     }
 }

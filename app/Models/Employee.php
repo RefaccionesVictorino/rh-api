@@ -38,6 +38,8 @@ class Employee extends Model
         'photo_url',
         'hire_date',
         'sub_department_id',
+        'termination_reason',
+        'terminated_by',
     ];
 
     protected function casts(): array
@@ -79,6 +81,11 @@ class Employee extends Model
     public function subDepartment(): BelongsTo
     {
         return $this->belongsTo(SubDepartment::class);
+    }
+
+    public function terminatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'terminated_by')->withTrashed();
     }
 
     public function emergencyContacts(): HasMany

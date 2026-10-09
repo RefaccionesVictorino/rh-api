@@ -17,6 +17,8 @@ class IndexEmployeeRequest extends FormRequest
         'municipality',
         'hire_date',
         'created_at',
+        // Fecha de baja; solo tiene valor en el listado de bajas.
+        'deleted_at',
     ];
 
     public const DEFAULT_PER_PAGE = 15;
@@ -39,7 +41,13 @@ class IndexEmployeeRequest extends FormRequest
             'per_page' => ['nullable', 'integer', 'min:1', 'max:'.self::MAX_PER_PAGE],
             'sort_by' => ['nullable', 'string', Rule::in(self::SORTABLE)],
             'sort_dir' => ['nullable', 'string', Rule::in(['asc', 'desc'])],
+            'status' => ['nullable', 'string', Rule::in(['active', 'terminated'])],
         ];
+    }
+
+    public function onlyTerminated(): bool
+    {
+        return $this->validated('status') === 'terminated';
     }
 
     public function search(): ?string

@@ -56,6 +56,11 @@ class EmployeeResource extends JsonResource
                 fn (): bool => (bool) $request->user()?->checkPermissionTo('turnos.asignar')
                     && Gate::allows('assign-shift', $this->resource),
             ),
+            $this->mergeWhen($this->trashed(), fn (): array => [
+                'terminated_at' => $this->deleted_at,
+                'termination_reason' => $this->termination_reason,
+                'terminated_by' => $this->whenLoaded('terminatedBy', fn () => $this->terminatedBy?->only(['id', 'name'])),
+            ]),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

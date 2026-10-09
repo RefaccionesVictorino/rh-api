@@ -18,7 +18,8 @@ class RolesAndPermissionsSeeder extends Seeder
     private array $permissions = [
         'usuarios' => ['ver', 'crear', 'editar', 'eliminar'],
         'roles' => ['ver', 'crear', 'editar', 'eliminar'],
-        'empleados' => ['ver', 'crear', 'editar', 'eliminar'],
+        // eliminar = dar de baja. Reactivar queda solo en admin.
+        'empleados' => ['ver', 'crear', 'editar', 'eliminar', 'reactivar'],
         'areas' => ['ver', 'crear', 'editar', 'eliminar'],
         'subareas' => ['ver', 'crear', 'editar', 'eliminar'],
         'sucursales' => ['ver', 'crear', 'editar', 'eliminar'],
@@ -47,7 +48,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $rh = Role::firstOrCreate(['name' => 'rh', 'guard_name' => 'web']);
         $rh->syncPermissions([
-            'empleados.ver', 'empleados.crear', 'empleados.editar',
+            'empleados.ver', 'empleados.crear', 'empleados.editar', 'empleados.eliminar',
             'areas.ver', 'areas.crear', 'areas.editar',
             'subareas.ver', 'subareas.crear', 'subareas.editar',
             'sucursales.ver', 'sucursales.crear', 'sucursales.editar',

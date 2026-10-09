@@ -31,6 +31,9 @@ return new class extends Migration
             $table->string('postal_code');
             $table->string('photo_url')->nullable();
             $table->date('hire_date');
+            // La baja es el borrado lógico: deleted_at es su fecha.
+            $table->string('termination_reason')->nullable();
+            $table->foreignId('terminated_by')->nullable()->constrained('users')->nullOnDelete();
             $table->softDeletes();
             $table->timestamps();
         });

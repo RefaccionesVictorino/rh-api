@@ -61,6 +61,11 @@ Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
         ->middleware('permission:empleados.ver');
     Route::put('/employees/{employee}', [EmployeeController::class, 'update'])
         ->middleware('permission:empleados.editar');
+    // Igual que el alta: la baja también retira al trabajador del checador.
+    Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])
+        ->middleware(['permission:empleados.eliminar', 'permission:checador.administrar']);
+    Route::post('/employees/{terminated_employee}/restore', [EmployeeController::class, 'restore'])
+        ->middleware(['permission:empleados.reactivar', 'permission:checador.administrar']);
 
     // POST y no PUT: el archivo viaja como multipart y PHP solo puebla $_FILES
     // en peticiones POST.
