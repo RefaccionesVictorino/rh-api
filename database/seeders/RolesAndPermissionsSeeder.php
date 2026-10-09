@@ -26,6 +26,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'turnos' => ['ver', 'crear', 'editar', 'eliminar', 'asignar'],
         'festivos' => ['ver', 'crear', 'editar', 'eliminar'],
         'vacaciones' => ['ver', 'solicitar', 'autorizar', 'configurar'],
+        // Incapacidades y permisos: las registra RH, no se solicitan.
+        'ausencias' => ['ver', 'registrar'],
         'checador' => ['ver', 'administrar', 'extraoficial'],
     ];
 
@@ -55,6 +57,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'turnos.ver', 'turnos.crear', 'turnos.editar', 'turnos.asignar',
             'festivos.ver', 'festivos.crear', 'festivos.editar',
             'vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.configurar',
+            'ausencias.ver', 'ausencias.registrar',
             'checador.ver', 'checador.administrar',
         ]);
 
@@ -64,6 +67,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $areaManager->syncPermissions([
             'empleados.ver',
             'turnos.ver', 'turnos.crear', 'turnos.asignar',
+            'ausencias.ver',
         ]);
 
         Role::firstOrCreate(['name' => 'empleado', 'guard_name' => 'web']);

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Absence;
 use App\Models\AttendancePunch;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
@@ -17,9 +18,9 @@ use Illuminate\Support\Collection;
  * Asistencia día por día de un empleado en un rango de fechas.
  *
  * Se calcula al vuelo a partir de las checadas crudas, del turno vigente en
- * cada fecha y de las excepciones que apliquen. No se persiste: cambiar el
- * turno o recibir una checada atrasada del equipo debe reflejarse sin
- * recalcular nada.
+ * cada fecha y de las excepciones, vacaciones y ausencias que apliquen. No se
+ * persiste: cambiar el turno, recibir una checada atrasada del equipo o
+ * capturar una incapacidad con fecha pasada debe reflejarse sin recalcular nada.
  */
 class AttendanceCalendarService
 {
@@ -40,6 +41,10 @@ class AttendanceCalendarService
     public const STATUS_WORKED = 'worked';
 
     public const STATUS_VACATION = 'vacation';
+
+    public const STATUS_SICK_LEAVE = 'sick_leave';
+
+    public const STATUS_LEAVE = 'leave';
 
     /**
      * En un turno nocturno la salida cae en el calendario del día siguiente.
@@ -83,6 +88,11 @@ class AttendanceCalendarService
             ->get()
             ->keyBy(fn (VacationRequestDay $day) => $day->date->toDateString());
 
+        $absences = $employee->absences()
+            ->overlapping($from, $to)
+            ->orderBy('starts_on')
+            ->get();
+
         // Un día más al final: la salida de un turno nocturno del último día
         // del rango queda en la madrugada siguiente.
         $punchesByDate = AttendancePunch::query()
@@ -123,7 +133,9 @@ class AttendanceCalendarService
                 }
             }
 
-            $days[] = $this->day($date, $today, $shift, $expected, $punches, $vacationDays->has($key));
+            $absence = $absences->first(fn (Absence $absence) => $absence->coversDate($date));
+
+            $days[] = $this->day($date, $today, $shift, $expected, $punches, $vacationDays->has($key), $absence);
         }
 
         return [
@@ -179,6 +191,7 @@ class AttendanceCalendarService
         ExpectedSchedule $expected,
         Collection $punches,
         bool $onVacation,
+        ?Absence $absence,
     ): array {
         $window = $expected->workWindow();
 
@@ -200,9 +213,18 @@ class AttendanceCalendarService
         $lateMinutes = 0;
         $breakOverrunMinutes = max(0, $breakMinutes - $expected->breakMinutes());
 
-        // Las vacaciones aprobadas solo cubren días hábiles, así que mandan
-        // sobre el turno: no se esperaba checada.
-        if ($onVacation) {
+        // Una incapacidad o permiso cubre días naturales, pero solo justifica
+        // los que eran laborables: el descanso y el festivo se siguen viendo
+        // como tales. Manda sobre las vacaciones si se empalman.
+        $onLeave = $absence !== null && $expected->hasShift() && ! $expected->isRestDay();
+
+        if ($onLeave) {
+            $status = $punches->isNotEmpty()
+                ? self::STATUS_WORKED
+                : ($absence->isIncapacity() ? self::STATUS_SICK_LEAVE : self::STATUS_LEAVE);
+        } elseif ($onVacation) {
+            // Las vacaciones aprobadas solo cubren días hábiles, así que mandan
+            // sobre el turno: no se esperaba checada.
             $status = $punches->isEmpty() ? self::STATUS_VACATION : self::STATUS_WORKED;
         } elseif (! $expected->hasShift()) {
             $status = $punches->isEmpty() ? self::STATUS_NO_SHIFT : self::STATUS_WORKED;
@@ -248,6 +270,14 @@ class AttendanceCalendarService
             'override' => $expected->override === null ? null : [
                 'id' => $expected->override->id,
                 'reason' => $expected->override->reason,
+            ],
+            // Se informa aunque caiga en descanso, para explicar el día.
+            'absence' => $absence === null ? null : [
+                'id' => $absence->id,
+                'type' => $absence->type,
+                'type_label' => $absence->type_label,
+                'is_incapacity' => $absence->isIncapacity(),
+                'folio' => $absence->folio,
             ],
             'expected' => $window === null ? null : [
                 'start' => $expected->startTime(),
@@ -459,7 +489,7 @@ class AttendanceCalendarService
         $counts = array_fill_keys([
             self::STATUS_ON_TIME, self::STATUS_LATE, self::STATUS_ABSENT, self::STATUS_REST,
             self::STATUS_HOLIDAY, self::STATUS_NO_SHIFT, self::STATUS_PENDING, self::STATUS_WORKED,
-            self::STATUS_VACATION,
+            self::STATUS_VACATION, self::STATUS_SICK_LEAVE, self::STATUS_LEAVE,
         ], 0);
 
         $workedMinutes = 0;

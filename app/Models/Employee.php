@@ -125,6 +125,11 @@ class Employee extends Model
         return $this->hasMany(VacationRequest::class);
     }
 
+    public function absences(): HasMany
+    {
+        return $this->hasMany(Absence::class);
+    }
+
     /** Años de servicio cumplidos a una fecha. */
     public function yearsOfServiceOn(?CarbonInterface $date = null): int
     {

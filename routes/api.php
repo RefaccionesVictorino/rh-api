@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AbsenceController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeAttendanceController;
@@ -183,6 +184,21 @@ Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
 
     Route::put('/vacation-periods/{vacation_period}/adjust', [VacationBalanceController::class, 'adjust'])
         ->middleware('permission:vacaciones.configurar');
+
+    // Incapacidades y permisos. Alta y edición van por POST: el certificado
+    // viaja como multipart y PHP solo puebla $_FILES en peticiones POST.
+    Route::get('/absences', [AbsenceController::class, 'index'])
+        ->middleware('permission:ausencias.ver');
+    Route::get('/employees/{employee}/absences', [AbsenceController::class, 'forEmployee'])
+        ->middleware('permission:ausencias.ver');
+    Route::post('/employees/{employee}/absences/conflicts', [AbsenceController::class, 'conflicts'])
+        ->middleware('permission:ausencias.ver');
+    Route::post('/employees/{employee}/absences', [AbsenceController::class, 'store'])
+        ->middleware('permission:ausencias.registrar');
+    Route::post('/absences/{absence}', [AbsenceController::class, 'update'])
+        ->middleware('permission:ausencias.registrar');
+    Route::delete('/absences/{absence}', [AbsenceController::class, 'destroy'])
+        ->middleware('permission:ausencias.registrar');
 
     // Administración del checador. Las escrituras devuelven 202: el terminal
     // aplica los cambios cuando sondea, no al instante.
