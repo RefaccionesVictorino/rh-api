@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AbsenceController;
+use App\Http\Controllers\AttendanceIncidentController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeAttendanceController;
@@ -75,9 +76,18 @@ Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
     Route::delete('/employees/{employee}/photo', [EmployeePhotoController::class, 'destroy'])
         ->middleware('permission:empleados.editar');
 
-    // Asistencia calculada al vuelo desde las checadas y el turno vigente.
+    // Calendario de un empleado: días cerrados desde attendance_days, hoy al vuelo.
     Route::get('/employees/{employee}/attendance', [EmployeeAttendanceController::class, 'calendar'])
         ->middleware('permission:empleados.ver');
+
+    // Incidencias de toda la empresa (retardos, faltas, salidas sin checar,
+    // comida excedida) leídas del resumen diario guardado.
+    Route::get('/attendance/incidents', [AttendanceIncidentController::class, 'index'])
+        ->middleware('permission:asistencia.ver');
+    Route::post('/attendance/days/{attendance_day}/justify', [AttendanceIncidentController::class, 'justify'])
+        ->middleware('permission:asistencia.justificar');
+    Route::delete('/attendance/days/{attendance_day}/justify', [AttendanceIncidentController::class, 'unjustify'])
+        ->middleware('permission:asistencia.justificar');
 
     // Antes del apiResource: si no, /departments/chart entra por show() con
     // "chart" como id y falla el route model binding.

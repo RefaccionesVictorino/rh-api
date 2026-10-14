@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreScheduleOverrideRequest;
 use App\Http\Resources\ScheduleOverrideResource;
+use App\Jobs\RecordAttendance;
 use App\Models\Employee;
 use App\Models\ScheduleOverride;
 use Illuminate\Http\JsonResponse;
@@ -42,6 +43,8 @@ class ScheduleOverrideController extends Controller
             $data + ['created_by' => $request->user()?->id],
         );
 
+        RecordAttendance::forEmployee($employee->id, $override->date, $override->date);
+
         return ScheduleOverrideResource::make($override->refresh()->load('createdBy'))
             ->response()
             ->setStatusCode($override->wasRecentlyCreated ? 201 : 200);
@@ -50,6 +53,8 @@ class ScheduleOverrideController extends Controller
     public function destroy(ScheduleOverride $scheduleOverride): JsonResponse
     {
         $scheduleOverride->delete();
+
+        RecordAttendance::forEmployee($scheduleOverride->employee_id, $scheduleOverride->date, $scheduleOverride->date);
 
         return response()->json(status: 204);
     }

@@ -2,6 +2,7 @@
 
 namespace App\Services\TimeClock;
 
+use App\Jobs\RecordAttendance;
 use App\Models\AttendancePunch;
 use App\Models\Employee;
 use App\Models\TimeClockCommand;
@@ -68,6 +69,9 @@ class ZkPushProtocol
         $timezone = config('time_clock.timezone');
         $employeeIdsByPin = [];
 
+        /** @var array<int, array{0: Carbon, 1: Carbon}> $touched Rango de fechas con checadas nuevas por empleado. */
+        $touched = [];
+
         foreach ($this->lines($body) as $line) {
             $fields = explode("\t", $line);
 
@@ -120,7 +124,18 @@ class ZkPushProtocol
 
             if ($punch->wasRecentlyCreated) {
                 $created++;
+
+                if ($punch->employee_id !== null) {
+                    $range = $touched[$punch->employee_id] ?? [$punchedAt, $punchedAt];
+                    $touched[$punch->employee_id] = [min($range[0], $punchedAt), max($range[1], $punchedAt)];
+                }
             }
+        }
+
+        // Un día antes: la checada de madrugada puede ser la salida del turno
+        // nocturno del día anterior.
+        foreach ($touched as $employeeId => [$first, $last]) {
+            RecordAttendance::forEmployee($employeeId, $first->copy()->subDay(), $last);
         }
 
         return $created;

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\RecordAttendance;
 use App\Models\Employee;
 use App\Models\User;
 use App\Models\VacationPeriod;
@@ -160,7 +161,7 @@ class VacationRequestService
     ): VacationRequest {
         $this->guardPending($request);
 
-        return DB::transaction(function () use ($request, $reviewedBy, $from, $to, $rescheduleReason): VacationRequest {
+        $request = DB::transaction(function () use ($request, $reviewedBy, $from, $to, $rescheduleReason): VacationRequest {
             if ($from !== null && $to !== null && $this->changesDates($request, $from, $to)) {
                 $this->reschedule($request, $from, $to, $rescheduleReason);
             }
@@ -173,6 +174,11 @@ class VacationRequestService
 
             return $request;
         });
+
+        // Vacaciones aprobadas con fecha pasada: esos días dejan de ser faltas.
+        RecordAttendance::forEmployee($request->employee_id, $request->starts_on, $request->ends_on);
+
+        return $request;
     }
 
     private function changesDates(VacationRequest $request, CarbonImmutable $from, CarbonImmutable $to): bool
@@ -273,7 +279,9 @@ class VacationRequestService
             ]);
         }
 
-        return DB::transaction(function () use ($request, $reviewedBy): VacationRequest {
+        $wasApproved = $request->status === VacationRequest::APPROVED;
+
+        $request = DB::transaction(function () use ($request, $reviewedBy): VacationRequest {
             $request->update([
                 'status' => VacationRequest::CANCELLED,
                 'reviewed_by' => $reviewedBy,
@@ -284,6 +292,12 @@ class VacationRequestService
 
             return $request;
         });
+
+        if ($wasApproved) {
+            RecordAttendance::forEmployee($request->employee_id, $request->starts_on, $request->ends_on);
+        }
+
+        return $request;
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Http\Requests\BulkAssignShiftRequest;
 use App\Http\Requests\StoreEmployeeShiftRequest;
 use App\Http\Requests\UpdateEmployeeShiftRequest;
 use App\Http\Resources\EmployeeShiftResource;
+use App\Jobs\RecordAttendance;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
 use App\Models\Shift;
@@ -111,6 +112,8 @@ class EmployeeShiftController extends Controller
         Gate::authorize('assign-shift', $shiftAssignment->employee);
 
         $shiftAssignment->delete();
+
+        RecordAttendance::forEmployee($shiftAssignment->employee_id, $shiftAssignment->starts_on, $shiftAssignment->ends_on);
 
         return response()->json(status: 204);
     }

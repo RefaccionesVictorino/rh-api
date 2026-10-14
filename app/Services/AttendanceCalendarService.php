@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Absence;
+use App\Models\AttendanceDay;
 use App\Models\AttendancePunch;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
@@ -17,10 +18,13 @@ use Illuminate\Support\Collection;
 /**
  * Asistencia día por día de un empleado en un rango de fechas.
  *
- * Se calcula al vuelo a partir de las checadas crudas, del turno vigente en
- * cada fecha y de las excepciones, vacaciones y ausencias que apliquen. No se
- * persiste: cambiar el turno, recibir una checada atrasada del equipo o
- * capturar una incapacidad con fecha pasada debe reflejarse sin recalcular nada.
+ * La evaluación de cada día sale de las checadas crudas, del turno vigente en
+ * esa fecha y de las excepciones, vacaciones y ausencias que apliquen. Los
+ * días ya cerrados (anteriores a hoy) se guardan en attendance_days y, una
+ * vez guardados, mandan sobre una evaluación nueva: así los reportes de toda
+ * la empresa se resuelven en SQL y cambiar un turno no reescribe el historial.
+ * Los disparadores (checada nueva, ausencia, excepción, vacación, turno) y el
+ * cierre nocturno son quienes recalculan; ver AttendanceRecorder.
  */
 class AttendanceCalendarService
 {
@@ -61,11 +65,56 @@ class AttendanceCalendarService
     public function __construct(private readonly HolidayCalendar $holidays) {}
 
     /**
+     * Calendario para mostrar: los días cerrados tal como quedaron guardados
+     * (se guardan aquí mismo si aún no existían), hoy y el futuro al vuelo.
+     *
      * @return array<string, mixed>
      */
     public function build(Employee $employee, CarbonImmutable $from, CarbonImmutable $to): array
     {
-        $today = CarbonImmutable::now(config('time_clock.timezone'))->startOfDay();
+        $today = $this->today();
+        $days = $this->evaluate($employee, $from, $to);
+
+        $stored = $employee->attendanceDays()
+            ->betweenDates($from, $to)
+            ->with('justifiedBy:id,name')
+            ->get()
+            ->keyBy(fn (AttendanceDay $row) => $row->date->toDateString());
+
+        foreach ($days as &$day) {
+            if ($day['date'] >= $today->toDateString()) {
+                continue;
+            }
+
+            $row = $stored->get($day['date']) ?? AttendanceDay::record($employee, $day);
+            $day = $this->overlay($day, $row);
+        }
+
+        unset($day);
+
+        return [
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'today' => $today->toDateString(),
+            'days' => $days,
+            'summary' => $this->summary($days),
+        ];
+    }
+
+    public function today(): CarbonImmutable
+    {
+        return CarbonImmutable::now(config('time_clock.timezone'))->startOfDay();
+    }
+
+    /**
+     * Evaluación al vuelo de cada día del rango, sin consultar ni tocar lo
+     * guardado. Es lo que AttendanceRecorder persiste.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function evaluate(Employee $employee, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        $today = $this->today();
 
         $assignments = $employee->shiftAssignments()
             ->with('shift.days')
@@ -138,13 +187,52 @@ class AttendanceCalendarService
             $days[] = $this->day($date, $today, $shift, $expected, $punches, $vacationDays->has($key), $absence);
         }
 
-        return [
-            'from' => $from->toDateString(),
-            'to' => $to->toDateString(),
-            'today' => $today->toDateString(),
-            'days' => $days,
-            'summary' => $this->summary($days),
-        ];
+        return $days;
+    }
+
+    /**
+     * Sustituye lo evaluado por lo guardado. Las checadas, el festivo, la
+     * excepción y la ausencia se siguen informando al vuelo: son el contexto
+     * que explica el renglón, no el veredicto.
+     *
+     * @param  array<string, mixed>  $day
+     * @return array<string, mixed>
+     */
+    private function overlay(array $day, AttendanceDay $row): array
+    {
+        $crossesMidnight = $row->expected_start !== null
+            && $row->expected_end !== null
+            && $row->expected_end <= $row->expected_start;
+
+        return array_replace($day, [
+            'attendance_day_id' => $row->id,
+            'status' => $row->status,
+            'schedule_source' => $row->schedule_source,
+            'expected' => $row->expected_start === null ? null : [
+                'start' => $row->expected_start,
+                'end' => $row->expected_end,
+                'crosses_midnight' => $crossesMidnight,
+                'work_minutes' => $row->expected_work_minutes,
+                'break_minutes' => $row->expected_break_minutes,
+            ],
+            'first_in' => $row->first_in,
+            'last_out' => $row->last_out,
+            'break_out' => $row->break_out,
+            'break_in' => $row->break_in,
+            'late_minutes' => $row->late_minutes,
+            'worked_minutes' => $row->worked_minutes,
+            'break_minutes' => $row->break_minutes,
+            'break_overrun_minutes' => $row->break_overrun_minutes,
+            'break_exceeded' => $row->break_exceeded,
+            'missing_out' => $row->missing_out,
+            'irregular_punches' => $row->irregular_punches,
+            'justified' => $row->isJustified() ? [
+                'reason' => $row->justification,
+                'at' => $row->justified_at->format('Y-m-d H:i:s'),
+                'by' => $row->justifiedBy?->name,
+            ] : null,
+            'is_locked' => $row->isLocked(),
+        ]);
     }
 
     /**
@@ -213,6 +301,11 @@ class AttendanceCalendarService
         $lateMinutes = 0;
         $breakOverrunMinutes = max(0, $breakMinutes - $expected->breakMinutes());
 
+        // Solo cuenta como incidencia cuando el turno tiene horario de comida:
+        // en un turno corrido el tiempo fuera se descuenta pero no se castiga.
+        $breakExceeded = $expected->breakWindow() !== null
+            && $breakOverrunMinutes > ($shift?->break_tolerance_minutes ?? 0);
+
         // Una incapacidad o permiso cubre días naturales, pero solo justifica
         // los que eran laborables: el descanso y el festivo se siguen viendo
         // como tales. Manda sobre las vacaciones si se empalman.
@@ -250,6 +343,8 @@ class AttendanceCalendarService
         $holiday = $expected->holiday;
 
         return [
+            // Nulo mientras el día no se haya guardado (hoy y el futuro).
+            'attendance_day_id' => null,
             'date' => $date->toDateString(),
             'weekday' => $date->dayOfWeek,
             'is_today' => $date->equalTo($today),
@@ -294,9 +389,12 @@ class AttendanceCalendarService
             'worked_minutes' => max(0, $worked),
             'break_minutes' => $breakMinutes,
             'break_overrun_minutes' => $breakOverrunMinutes,
+            'break_exceeded' => $breakExceeded,
             // Entró pero no hay salida registrada y el día ya pasó.
             'missing_out' => $isScheduled && $lastOut === null && $date->lt($today),
             'irregular_punches' => $pairs['irregular'],
+            'justified' => null,
+            'is_locked' => false,
             'punches' => $punches->map(fn (AttendancePunch $punch) => [
                 'id' => $punch->id,
                 'punched_at' => $punch->punched_at->format('Y-m-d H:i:s'),
@@ -481,6 +579,10 @@ class AttendanceCalendarService
     }
 
     /**
+     * Un retardo o falta justificados por RH salen de su conteo y van a
+     * justified_late / justified_absent: el retardo justificado sigue siendo
+     * un día asistido y la falta justificada deja de contar como programada.
+     *
      * @param  list<array<string, mixed>>  $days
      * @return array<string, int|null>
      */
@@ -490,39 +592,52 @@ class AttendanceCalendarService
             self::STATUS_ON_TIME, self::STATUS_LATE, self::STATUS_ABSENT, self::STATUS_REST,
             self::STATUS_HOLIDAY, self::STATUS_NO_SHIFT, self::STATUS_PENDING, self::STATUS_WORKED,
             self::STATUS_VACATION, self::STATUS_SICK_LEAVE, self::STATUS_LEAVE,
+            'justified_late', 'justified_absent',
         ], 0);
 
         $workedMinutes = 0;
         $expectedMinutes = 0;
         $lateMinutes = 0;
         $breakOverrunMinutes = 0;
+        $breakExceeded = 0;
         $missingOut = 0;
+        $justified = 0;
 
         foreach ($days as $day) {
-            $counts[$day['status']]++;
+            $isJustified = $day['justified'] !== null;
+            $key = match (true) {
+                $isJustified && $day['status'] === self::STATUS_LATE => 'justified_late',
+                $isJustified && $day['status'] === self::STATUS_ABSENT => 'justified_absent',
+                default => $day['status'],
+            };
+
+            $counts[$key]++;
             $workedMinutes += $day['worked_minutes'];
             $lateMinutes += $day['late_minutes'];
             $breakOverrunMinutes += $day['break_overrun_minutes'];
+            $breakExceeded += $day['break_exceeded'] ? 1 : 0;
             $missingOut += $day['missing_out'] ? 1 : 0;
+            $justified += $isJustified ? 1 : 0;
 
             // Solo los días ya evaluados suman jornada esperada.
-            if (in_array($day['status'], [self::STATUS_ON_TIME, self::STATUS_LATE, self::STATUS_ABSENT], true)) {
+            if (in_array($key, [self::STATUS_ON_TIME, self::STATUS_LATE, self::STATUS_ABSENT, 'justified_late'], true)) {
                 $expectedMinutes += $day['expected']['work_minutes'] ?? 0;
             }
         }
 
-        $scheduled = $counts[self::STATUS_ON_TIME] + $counts[self::STATUS_LATE] + $counts[self::STATUS_ABSENT];
+        $attended = $counts[self::STATUS_ON_TIME] + $counts[self::STATUS_LATE] + $counts['justified_late'];
+        $scheduled = $attended + $counts[self::STATUS_ABSENT];
 
         return $counts + [
             'scheduled_days' => $scheduled,
-            'attendance_rate' => $scheduled === 0
-                ? null
-                : (int) round(($counts[self::STATUS_ON_TIME] + $counts[self::STATUS_LATE]) / $scheduled * 100),
+            'attendance_rate' => $scheduled === 0 ? null : (int) round($attended / $scheduled * 100),
             'worked_minutes' => $workedMinutes,
             'expected_minutes' => $expectedMinutes,
             'late_minutes' => $lateMinutes,
             'break_overrun_minutes' => $breakOverrunMinutes,
+            'break_exceeded' => $breakExceeded,
             'missing_out' => $missingOut,
+            'justified' => $justified,
         ];
     }
 }

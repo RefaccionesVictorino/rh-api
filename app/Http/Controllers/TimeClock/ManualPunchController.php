@@ -4,6 +4,7 @@ namespace App\Http\Controllers\TimeClock;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreManualPunchRequest;
+use App\Jobs\RecordAttendance;
 use App\Models\AttendancePunch;
 use App\Models\Employee;
 use Illuminate\Http\JsonResponse;
@@ -30,6 +31,9 @@ class ManualPunchController extends Controller
             'created_by' => $request->user()?->id,
             'notes' => $data['notes'],
         ]);
+
+        // Un día antes por si es la salida de madrugada de un turno nocturno.
+        RecordAttendance::forEmployee($employee->id, $punch->punched_at->copy()->subDay(), $punch->punched_at);
 
         return response()->json([
             'data' => [

@@ -45,6 +45,7 @@ class UpdateShiftRequest extends FormRequest
             'description' => ['sometimes', 'nullable', 'string', 'max:255'],
             'tolerance_minutes' => ['sometimes', 'integer', 'min:0', 'max:240'],
             'absence_after_minutes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:720', 'gte:'.(int) $tolerance],
+            'break_tolerance_minutes' => ['sometimes', 'integer', 'min:0', 'max:240'],
             'is_active' => ['sometimes', 'boolean'],
             // Si viene, reemplaza el horario semanal completo.
             'days' => ['sometimes', 'required', 'array', 'min:1', 'max:7'],
@@ -77,6 +78,7 @@ class UpdateShiftRequest extends FormRequest
             'description' => 'descripción',
             'tolerance_minutes' => 'tolerancia de retardo',
             'absence_after_minutes' => 'umbral de falta',
+            'break_tolerance_minutes' => 'tolerancia de comida',
             'is_active' => 'activo',
         ] + $this->dayAttributes();
     }

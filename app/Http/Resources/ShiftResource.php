@@ -23,6 +23,7 @@ class ShiftResource extends JsonResource
             'description' => $this->description,
             'tolerance_minutes' => $this->tolerance_minutes,
             'absence_after_minutes' => $this->absence_after_minutes,
+            'break_tolerance_minutes' => $this->break_tolerance_minutes,
             'is_active' => $this->is_active,
             'days' => ShiftDayResource::collection($this->whenLoaded('days')),
             // Resumen para el listado: cuántos días se trabaja y cuántos

@@ -18,6 +18,7 @@ class Shift extends Model
         'description',
         'tolerance_minutes',
         'absence_after_minutes',
+        'break_tolerance_minutes',
         'is_active',
     ];
 
@@ -26,6 +27,7 @@ class Shift extends Model
         return [
             'tolerance_minutes' => 'integer',
             'absence_after_minutes' => 'integer',
+            'break_tolerance_minutes' => 'integer',
             'is_active' => 'boolean',
         ];
     }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreHolidayRuleRequest;
 use App\Http\Requests\UpdateHolidayRuleRequest;
 use App\Http\Resources\HolidayRuleResource;
+use App\Jobs\RecordAttendance;
 use App\Models\HolidayRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,8 @@ class HolidayRuleController extends Controller
     {
         $rule = HolidayRule::create($request->payload());
 
+        $this->recordCurrentYear($rule);
+
         return HolidayRuleResource::make($rule->refresh())
             ->response()
             ->setStatusCode(201);
@@ -44,7 +47,11 @@ class HolidayRuleController extends Controller
 
     public function update(UpdateHolidayRuleRequest $request, HolidayRule $holidayRule): HolidayRuleResource
     {
+        $this->recordCurrentYear($holidayRule);
+
         $holidayRule->update($request->payload());
+
+        $this->recordCurrentYear($holidayRule);
 
         return HolidayRuleResource::make($holidayRule->refresh());
     }
@@ -57,6 +64,21 @@ class HolidayRuleController extends Controller
     {
         $holidayRule->delete();
 
+        $this->recordCurrentYear($holidayRule);
+
         return response()->json(status: 204);
+    }
+
+    /**
+     * Solo el año en curso: una regla capturada tarde suele ser por un festivo
+     * de este año que ya pasó. Años anteriores se dejan como se evaluaron.
+     */
+    private function recordCurrentYear(HolidayRule $rule): void
+    {
+        $date = $rule->dateFor((int) now(config('time_clock.timezone'))->year);
+
+        if ($date !== null) {
+            RecordAttendance::forDate($date);
+        }
     }
 }

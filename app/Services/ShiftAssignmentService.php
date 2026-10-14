@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\RecordAttendance;
 use App\Models\Employee;
 use App\Models\EmployeeShift;
 use App\Models\Shift;
@@ -29,7 +30,7 @@ class ShiftAssignmentService
         ?string $notes,
         ?int $assignedBy,
     ): EmployeeShift {
-        return DB::transaction(function () use ($employee, $shift, $startsOn, $endsOn, $notes, $assignedBy): EmployeeShift {
+        $assignment = DB::transaction(function () use ($employee, $shift, $startsOn, $endsOn, $notes, $assignedBy): EmployeeShift {
             $this->guardHireDate($employee, $startsOn);
 
             $overlapping = $employee->shiftAssignments()
@@ -77,6 +78,12 @@ class ShiftAssignmentService
 
             return $assignment;
         });
+
+        // Un turno con fecha pasada cambia el horario contra el que ya se
+        // evaluaron esos días.
+        RecordAttendance::forEmployee($employee->id, $startsOn, $endsOn);
+
+        return $assignment;
     }
 
     /**
@@ -125,7 +132,9 @@ class ShiftAssignmentService
      */
     public function update(EmployeeShift $assignment, array $data): EmployeeShift
     {
-        return DB::transaction(function () use ($assignment, $data): EmployeeShift {
+        $previousStart = $assignment->starts_on;
+
+        $assignment = DB::transaction(function () use ($assignment, $data): EmployeeShift {
             $assignment->fill($data);
 
             $this->guardHireDate($assignment->employee, $assignment->starts_on);
@@ -145,6 +154,12 @@ class ShiftAssignmentService
 
             return $assignment;
         });
+
+        // Desde la fecha más antigua entre la anterior y la nueva: mover el
+        // inicio hacia adelante deja días que ahora evalúa otro turno.
+        RecordAttendance::forEmployee($assignment->employee_id, min($previousStart, $assignment->starts_on));
+
+        return $assignment;
     }
 
     private function guardHireDate(Employee $employee, CarbonInterface $startsOn): void

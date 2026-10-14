@@ -157,6 +157,12 @@ class Employee extends Model
         return $this->hasMany(AttendancePunch::class);
     }
 
+    /** Resumen diario de asistencia de los días ya cerrados. */
+    public function attendanceDays(): HasMany
+    {
+        return $this->hasMany(AttendanceDay::class);
+    }
+
     /** Historial completo de turnos asignados. */
     public function shiftAssignments(): HasMany
     {

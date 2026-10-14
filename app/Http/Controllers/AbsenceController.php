@@ -6,6 +6,7 @@ use App\Http\Requests\IndexAbsenceRequest;
 use App\Http\Requests\StoreAbsenceRequest;
 use App\Http\Resources\AbsenceResource;
 use App\Http\Resources\VacationRequestResource;
+use App\Jobs\RecordAttendance;
 use App\Models\Absence;
 use App\Models\Employee;
 use App\Models\SubDepartment;
@@ -150,6 +151,8 @@ class AbsenceController extends Controller
             'created_by' => $request->user()?->id,
         ]);
 
+        RecordAttendance::forEmployee($employee->id, $absence->starts_on, $absence->ends_on);
+
         return AbsenceResource::make($absence->refresh()->load('createdBy'))
             ->response()
             ->setStatusCode(201);
@@ -176,7 +179,17 @@ class AbsenceController extends Controller
             $changes['document_url'] = null;
         }
 
+        // Las fechas anteriores también cambian: un día que la ausencia ya no
+        // cubre vuelve a evaluarse contra las checadas.
+        $previous = [$absence->starts_on, $absence->ends_on];
+
         $absence->update($changes);
+
+        RecordAttendance::forEmployee(
+            $absence->employee_id,
+            min($previous[0], $absence->starts_on),
+            max($previous[1], $absence->ends_on),
+        );
 
         return AbsenceResource::make($absence->refresh()->load('createdBy'));
     }
@@ -184,6 +197,8 @@ class AbsenceController extends Controller
     public function destroy(Absence $absence): JsonResponse
     {
         $absence->delete();
+
+        RecordAttendance::forEmployee($absence->employee_id, $absence->starts_on, $absence->ends_on);
 
         return response()->json(status: 204);
     }

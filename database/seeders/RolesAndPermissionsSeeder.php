@@ -29,6 +29,8 @@ class RolesAndPermissionsSeeder extends Seeder
         // Incapacidades y permisos: las registra RH, no se solicitan.
         'ausencias' => ['ver', 'registrar'],
         'checador' => ['ver', 'administrar', 'extraoficial'],
+        // Incidencias de asistencia (retardos, faltas) y su justificación.
+        'asistencia' => ['ver', 'justificar'],
     ];
 
     public function run(): void
@@ -59,6 +61,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.configurar',
             'ausencias.ver', 'ausencias.registrar',
             'checador.ver', 'checador.administrar',
+            'asistencia.ver', 'asistencia.justificar',
         ]);
 
         // Sus asignaciones de turno se recortan a la parte del organigrama que

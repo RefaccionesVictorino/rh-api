@@ -33,6 +33,10 @@ return new class extends Migration
             // por sí solo.
             $table->unsignedSmallInteger('absence_after_minutes')->nullable();
 
+            // Minutos de comida por encima del horario a partir de los cuales
+            // el día se marca como comida excedida.
+            $table->unsignedSmallInteger('break_tolerance_minutes')->default(10);
+
             $table->boolean('is_active')->default(true);
             $table->softDeletes();
             $table->timestamps();

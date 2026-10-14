@@ -37,6 +37,7 @@ class StoreShiftRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:255'],
             'tolerance_minutes' => ['nullable', 'integer', 'min:0', 'max:240'],
             'absence_after_minutes' => ['nullable', 'integer', 'min:0', 'max:720', 'gte:tolerance_minutes'],
+            'break_tolerance_minutes' => ['nullable', 'integer', 'min:0', 'max:240'],
             'is_active' => ['nullable', 'boolean'],
             'days' => ['required', 'array', 'min:1', 'max:7'],
         ] + $this->dayRules();
@@ -68,6 +69,7 @@ class StoreShiftRequest extends FormRequest
             'description' => 'descripción',
             'tolerance_minutes' => 'tolerancia de retardo',
             'absence_after_minutes' => 'umbral de falta',
+            'break_tolerance_minutes' => 'tolerancia de comida',
             'is_active' => 'activo',
         ] + $this->dayAttributes();
     }

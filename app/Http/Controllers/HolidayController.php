@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreHolidayRequest;
 use App\Http\Requests\UpdateHolidayRequest;
 use App\Http\Resources\HolidayResource;
+use App\Jobs\RecordAttendance;
 use App\Models\Holiday;
 use App\Services\HolidayCalendar;
 use Carbon\CarbonImmutable;
@@ -42,6 +43,8 @@ class HolidayController extends Controller
     {
         $holiday = Holiday::create($request->payload());
 
+        RecordAttendance::forDate($holiday->date);
+
         return HolidayResource::make($holiday->refresh())
             ->response()
             ->setStatusCode(201);
@@ -54,7 +57,15 @@ class HolidayController extends Controller
 
     public function update(UpdateHolidayRequest $request, Holiday $holiday): HolidayResource
     {
+        $previousDate = $holiday->date;
+
         $holiday->update($request->payload());
+
+        RecordAttendance::forDate($previousDate);
+
+        if (! $holiday->date->equalTo($previousDate)) {
+            RecordAttendance::forDate($holiday->date);
+        }
 
         return HolidayResource::make($holiday->refresh());
     }
@@ -62,6 +73,8 @@ class HolidayController extends Controller
     public function destroy(Holiday $holiday): JsonResponse
     {
         $holiday->delete();
+
+        RecordAttendance::forDate($holiday->date);
 
         return response()->json(status: 204);
     }
