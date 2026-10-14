@@ -12,8 +12,8 @@ use Illuminate\Support\Str;
 /**
  * Siembra la plantilla a partir del catálogo real del checador
  * (database/data/time_clock_users.json): nombre y RFC son los reales; todo lo
- * que el checador no sabe (CURP, NSS, domicilio, teléfonos, fecha de ingreso,
- * foto) se genera con datos mexicanos coherentes.
+ * que el checador no sabe (CURP, NSS, domicilio, teléfonos, fecha de ingreso)
+ * se genera con datos mexicanos coherentes. La foto es un avatar genérico.
  *
  * Además liga cada empleado con su usuario del checador y adopta las checadas
  * que hubieran llegado antes de existir el empleado. Es idempotente: quien ya
@@ -31,8 +31,8 @@ class EmployeesTableSeeder extends Seeder
     /** Empleados ficticios adicionales a la plantilla real. */
     private const EXTRA_FAKE = 0;
 
-    /** Retratos disponibles por carpeta en randomuser.me. */
-    private const RETRATOS_POR_CARPETA = 100;
+    /** Avatar genérico que se usa como foto de todos los sembrados. */
+    private const DEFAULT_PHOTO = 'img/default-avatar.svg';
 
     /** Partículas que se pegan al apellido o nombre que les sigue. */
     private const PARTICULAS = ['DE', 'DEL', 'LA', 'LAS', 'LOS', 'Y'];
@@ -93,9 +93,6 @@ class EmployeesTableSeeder extends Seeder
 
     /** Valores ya ocupados en columnas que en la vida real son irrepetibles. */
     private array $usados = ['rfc' => [], 'curp' => [], 'nss' => [], 'email' => []];
-
-    /** Retratos ya asignados, por carpeta. */
-    private array $retratosUsados = ['men' => [], 'women' => []];
 
     public function run(): void
     {
@@ -239,7 +236,7 @@ class EmployeesTableSeeder extends Seeder
             ),
             'municipality' => $municipio,
             'postal_code' => $codigosPostales[array_rand($codigosPostales)],
-            'photo_url' => $this->foto($genero),
+            'photo_url' => asset(self::DEFAULT_PHOTO),
             'hire_date' => $this->fechaIngreso($nacimiento)->format('Y-m-d'),
         ];
     }
@@ -481,33 +478,6 @@ class EmployeesTableSeeder extends Seeder
             random_int(0, 99),
             random_int(0, 99999)
         );
-    }
-
-    /**
-     * Retrato de randomuser.me, acorde al género del registro.
-     * Cada carpeta tiene 100 imágenes (0-99); se evitan repeticiones
-     * mientras el inventario alcance.
-     */
-    private function foto(string $genero): string
-    {
-        // randomuser.me solo publica men/women; para no binario se alterna.
-        $carpeta = match ($genero) {
-            'masculino' => 'men',
-            'femenino' => 'women',
-            default => random_int(0, 1) ? 'men' : 'women',
-        };
-
-        if (count($this->retratosUsados[$carpeta]) >= self::RETRATOS_POR_CARPETA) {
-            $this->retratosUsados[$carpeta] = [];
-        }
-
-        do {
-            $indice = random_int(0, self::RETRATOS_POR_CARPETA - 1);
-        } while (isset($this->retratosUsados[$carpeta][$indice]));
-
-        $this->retratosUsados[$carpeta][$indice] = true;
-
-        return sprintf('https://randomuser.me/api/portraits/%s/%d.jpg', $carpeta, $indice);
     }
 
     private function telefono(): string
