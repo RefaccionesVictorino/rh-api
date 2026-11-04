@@ -188,6 +188,15 @@ class VacationRequestController extends Controller
             $request->validated('reschedule_reason'),
         );
 
+        if ($request->paysPremium()) {
+            $request->premiumPeriod()?->recordPremiumPayment(
+                (float) $request->validated('premium_amount'),
+                CarbonImmutable::parse($request->validated('premium_paid_on')),
+                $request->user()?->id,
+                $request->validated('premium_percentage') === null ? null : (float) $request->validated('premium_percentage'),
+            );
+        }
+
         return VacationRequestResource::make(
             $vacationRequest->refresh()->load(['employee', 'reviewedBy', 'days'])
         );

@@ -2,14 +2,19 @@
 
 namespace App\Http\Requests;
 
+use App\Models\VacationPeriod;
 use App\Models\VacationRequest;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 /**
  * Aprobación con fechas opcionales: si vienen y difieren de las pedidas, RH
  * está reprogramando y debe explicar por qué. Sin fechas, o con las mismas,
  * se aprueba tal cual.
+ *
+ * Puede traer además el pago de la prima vacacional del periodo, que suele
+ * hacerse con la primera solicitud aprobada. Es opcional y exige su permiso.
  */
 class ApproveVacationRequestRequest extends FormRequest
 {
@@ -27,6 +32,7 @@ class ApproveVacationRequestRequest extends FormRequest
             'starts_on' => ['nullable', 'required_with:ends_on', 'date_format:Y-m-d'],
             'ends_on' => ['nullable', 'required_with:starts_on', 'date_format:Y-m-d', 'after_or_equal:starts_on'],
             'reschedule_reason' => ['nullable', 'string', 'max:255'],
+            ...PayVacationPremiumRequest::premiumRules(required: false),
         ];
     }
 
@@ -34,7 +40,13 @@ class ApproveVacationRequestRequest extends FormRequest
     {
         return [
             function ($validator): void {
-                if ($validator->errors()->isNotEmpty() || ! $this->reschedules()) {
+                if ($validator->errors()->isNotEmpty()) {
+                    return;
+                }
+
+                $this->validatePremium($validator);
+
+                if (! $this->reschedules()) {
                     return;
                 }
 
@@ -53,6 +65,54 @@ class ApproveVacationRequestRequest extends FormRequest
                 }
             },
         ];
+    }
+
+    /** Monto y fecha van juntos, y solo quien puede pagar primas los manda. */
+    private function validatePremium(Validator $validator): void
+    {
+        $hasAmount = $this->validated('premium_amount') !== null;
+        $hasDate = $this->validated('premium_paid_on') !== null;
+
+        if (! $hasAmount && ! $hasDate) {
+            return;
+        }
+
+        if (! $hasAmount) {
+            $validator->errors()->add('premium_amount', 'Captura el monto de la prima.');
+        }
+
+        if (! $hasDate) {
+            $validator->errors()->add('premium_paid_on', 'Captura la fecha de pago de la prima.');
+        }
+
+        if (! $this->user()?->can('vacaciones.pagar_prima')) {
+            $validator->errors()->add('premium_amount', 'Tu cuenta no tiene permiso para registrar el pago de la prima.');
+        }
+
+        if ($this->premiumPeriod()?->is_premium_paid) {
+            $validator->errors()->add('premium_amount', 'La prima de este periodo ya está pagada; corrígela desde el periodo.');
+        }
+    }
+
+    public function paysPremium(): bool
+    {
+        return $this->validated('premium_amount') !== null;
+    }
+
+    /**
+     * Periodo al que se abona la prima: el que cubre la fecha con la que se
+     * aprueba. Nulo si aún no cumple el año (sin periodo generado).
+     */
+    public function premiumPeriod(): ?VacationPeriod
+    {
+        /** @var VacationRequest $vacationRequest */
+        $vacationRequest = $this->route('vacation_request');
+        $startsOn = $this->range()[0] ?? $vacationRequest->starts_on;
+
+        return $vacationRequest->employee->vacationPeriods()
+            ->whereDate('starts_on', '<=', $startsOn->toDateString())
+            ->whereDate('ends_on', '>=', $startsOn->toDateString())
+            ->first();
     }
 
     /** Hay fechas y no son las que pidió el empleado. */
@@ -98,6 +158,7 @@ class ApproveVacationRequestRequest extends FormRequest
             'starts_on' => 'fecha de inicio',
             'ends_on' => 'fecha de fin',
             'reschedule_reason' => 'motivo del cambio',
+            ...PayVacationPremiumRequest::premiumAttributes(),
         ];
     }
 }

@@ -8,6 +8,7 @@ use App\Models\Shift;
 use App\Models\SubDepartment;
 use App\Models\User;
 use App\Models\VacationRequest;
+use App\Services\VacationPeriodService;
 use App\Services\VacationRequestService;
 use App\Services\VacationSheetService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
@@ -229,6 +230,21 @@ class VacationRequestSheetTest extends TestCase
         $summary = view('pdf.vacation-period-summary', $sheets->periodSummary($period))->render();
         $this->assertStringContainsString('Año 2 de servicio', $summary);
         $this->assertStringContainsString('Total aprobado', $summary);
+        $this->assertStringContainsString('Sin pago registrado', $summary);
         $this->assertStringNotContainsString('Firma del', $summary);
+    }
+
+    public function test_the_period_summary_shows_the_premium_payment(): void
+    {
+        $employee = $this->employee();
+        $period = app(VacationPeriodService::class)->ensurePeriods($employee)
+            ->firstWhere('year_number', 2);
+        $period->recordPremiumPayment(1850.5, CarbonImmutable::parse('2026-09-10'), null, 25);
+
+        $summary = view('pdf.vacation-period-summary', app(VacationSheetService::class)->periodSummary($period->fresh()))->render();
+
+        $this->assertStringContainsString('10/09/2026', $summary);
+        $this->assertStringContainsString('$1,850.50', $summary);
+        $this->assertStringContainsString('25%', $summary);
     }
 }

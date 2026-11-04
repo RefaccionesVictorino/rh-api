@@ -126,6 +126,18 @@ class VacationSheetService
         return rtrim(rtrim(number_format($days, 1, '.', ''), '0'), '.');
     }
 
+    /** "$1,250.00" */
+    public static function money(float|int $amount): string
+    {
+        return '$'.number_format($amount, 2);
+    }
+
+    /** "25%" o "27.5%": el entero no lleva decimales. */
+    public static function percent(float|int $percentage): string
+    {
+        return rtrim(rtrim(number_format($percentage, 2, '.', ''), '0'), '.').'%';
+    }
+
     /** "08/09/2026" */
     public static function shortDate(CarbonInterface|string|null $date): string
     {

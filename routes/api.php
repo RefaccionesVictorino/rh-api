@@ -204,6 +204,8 @@ Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
 
     Route::put('/vacation-periods/{vacation_period}/adjust', [VacationBalanceController::class, 'adjust'])
         ->middleware('permission:vacaciones.configurar');
+    Route::put('/vacation-periods/{vacation_period}/premium', [VacationBalanceController::class, 'payPremium'])
+        ->middleware('permission:vacaciones.pagar_prima');
 
     // Incapacidades y permisos. Alta y edición van por POST: el certificado
     // viaja como multipart y PHP solo puebla $_FILES en peticiones POST.

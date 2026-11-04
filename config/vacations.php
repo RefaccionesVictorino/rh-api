@@ -18,4 +18,16 @@ return [
     |
     */
     'start_date' => env('VACATIONS_START_DATE'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Prima vacacional
+    |--------------------------------------------------------------------------
+    |
+    | Porcentaje sobre el salario de los días de vacaciones (artículo 80: 25%
+    | como mínimo). Es el mismo para toda la empresa; se copia al periodo al
+    | registrar el pago.
+    |
+    */
+    'premium_percentage' => (float) env('VACATIONS_PREMIUM_PERCENTAGE', 25),
 ];

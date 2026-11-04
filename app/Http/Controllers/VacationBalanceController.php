@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\PayVacationPremiumRequest;
 use App\Http\Resources\VacationPeriodResource;
 use App\Models\Employee;
 use App\Models\VacationEntitlement;
 use App\Models\VacationPeriod;
 use App\Services\VacationPeriodService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -35,9 +37,27 @@ class VacationBalanceController extends Controller
                 'expired_days' => $summary['expired_days'],
                 'taken_days' => $summary['taken_days'],
                 'granted_days' => $summary['granted_days'],
+                // Porcentaje global vigente, para precargarlo al registrar un pago.
+                'premium_percentage' => (float) config('vacations.premium_percentage'),
                 'periods' => VacationPeriodResource::collection($summary['periods']),
             ],
         ]);
+    }
+
+    /**
+     * Pago de la prima vacacional del periodo. Volver a mandarlo corrige el
+     * pago registrado: se paga una sola vez, así que no hay historial.
+     */
+    public function payPremium(PayVacationPremiumRequest $request, VacationPeriod $vacationPeriod): VacationPeriodResource
+    {
+        $vacationPeriod->recordPremiumPayment(
+            (float) $request->validated('premium_amount'),
+            CarbonImmutable::parse($request->validated('premium_paid_on')),
+            $request->user()?->id,
+            $request->validated('premium_percentage') === null ? null : (float) $request->validated('premium_percentage'),
+        );
+
+        return VacationPeriodResource::make($vacationPeriod->refresh()->load('premiumPaidBy'));
     }
 
     /**

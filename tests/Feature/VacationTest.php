@@ -1042,4 +1042,171 @@ class VacationTest extends TestCase
             'starts_on' => '2026-11-09', 'ends_on' => '2026-11-11',
         ])->assertOk()->assertJsonCount(0, 'data');
     }
+
+    public function test_periods_start_without_a_premium_payment(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver');
+        config(['vacations.premium_percentage' => 25]);
+        $employee = $this->employee(yearsAgo: 1);
+
+        $response = $this->getJson("/api/employees/{$employee->id}/vacation-balance")->assertOk();
+
+        $this->assertEqualsWithDelta(25, $response->json('data.premium_percentage'), 0.01);
+        $this->assertFalse($response->json('data.periods.0.is_premium_paid'));
+        $this->assertNull($response->json('data.periods.0.premium_paid_on'));
+    }
+
+    public function test_the_premium_is_recorded_with_the_global_percentage(): void
+    {
+        $user = $this->actingAsUserWith('vacaciones.pagar_prima');
+        config(['vacations.premium_percentage' => 25]);
+        $employee = $this->employee(yearsAgo: 1);
+        $period = app(VacationPeriodService::class)->ensurePeriods($employee)->first();
+
+        $this->putJson("/api/vacation-periods/{$period->id}/premium", [
+            'premium_amount' => 1850.5,
+            'premium_paid_on' => '2026-09-15',
+        ])->assertOk()
+            ->assertJsonPath('data.is_premium_paid', true)
+            ->assertJsonPath('data.premium_amount', 1850.5)
+            ->assertJsonPath('data.premium_percentage', 25)
+            ->assertJsonPath('data.premium_paid_on', '2026-09-15')
+            ->assertJsonPath('data.premium_paid_by.id', $user->id);
+
+        // Un cambio posterior en el global no reescribe lo pagado.
+        config(['vacations.premium_percentage' => 30]);
+        $this->assertEqualsWithDelta(25, $period->fresh()->premium_percentage, 0.01);
+    }
+
+    public function test_the_premium_percentage_can_be_overridden_per_period(): void
+    {
+        $this->actingAsUserWith('vacaciones.pagar_prima');
+        $employee = $this->employee(yearsAgo: 1);
+        $period = app(VacationPeriodService::class)->ensurePeriods($employee)->first();
+
+        $this->putJson("/api/vacation-periods/{$period->id}/premium", [
+            'premium_amount' => 2000,
+            'premium_paid_on' => '2026-09-15',
+            'premium_percentage' => 30,
+        ])->assertOk()->assertJsonPath('data.premium_percentage', 30);
+    }
+
+    public function test_the_premium_needs_amount_and_a_date_that_is_not_in_the_future(): void
+    {
+        $this->actingAsUserWith('vacaciones.pagar_prima');
+        $employee = $this->employee(yearsAgo: 1);
+        $period = app(VacationPeriodService::class)->ensurePeriods($employee)->first();
+
+        $this->putJson("/api/vacation-periods/{$period->id}/premium", [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['premium_amount', 'premium_paid_on']);
+
+        $this->putJson("/api/vacation-periods/{$period->id}/premium", [
+            'premium_amount' => 0,
+            'premium_paid_on' => '2026-09-17',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['premium_amount', 'premium_paid_on']);
+    }
+
+    public function test_paying_the_premium_needs_its_own_permission(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.autorizar', 'vacaciones.configurar');
+        $employee = $this->employee(yearsAgo: 1);
+        $period = app(VacationPeriodService::class)->ensurePeriods($employee)->first();
+
+        $this->putJson("/api/vacation-periods/{$period->id}/premium", [
+            'premium_amount' => 1000,
+            'premium_paid_on' => '2026-09-15',
+        ])->assertForbidden();
+    }
+
+    public function test_approving_can_record_the_premium_of_the_period(): void
+    {
+        $user = $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.pagar_prima');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        $this->postJson("/api/vacation-requests/{$id}/approve", [
+            'premium_amount' => 1500,
+            'premium_paid_on' => '2026-09-16',
+        ])->assertOk()->assertJsonPath('data.status', VacationRequest::APPROVED);
+
+        $period = $employee->vacationPeriods()->first()->fresh();
+
+        $this->assertTrue($period->is_premium_paid);
+        $this->assertEqualsWithDelta(1500, $period->premium_amount, 0.01);
+        $this->assertSame('2026-09-16', $period->premium_paid_on->toDateString());
+        $this->assertSame($user->id, $period->premium_paid_by);
+    }
+
+    public function test_approving_without_premium_fields_leaves_the_period_unpaid(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.pagar_prima');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        $this->postJson("/api/vacation-requests/{$id}/approve")->assertOk();
+
+        $this->assertFalse($employee->vacationPeriods()->first()->fresh()->is_premium_paid);
+    }
+
+    public function test_the_premium_in_an_approval_needs_the_permission(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        $this->postJson("/api/vacation-requests/{$id}/approve", [
+            'premium_amount' => 1500,
+            'premium_paid_on' => '2026-09-16',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['premium_amount']);
+
+        $this->assertSame(VacationRequest::PENDING, VacationRequest::find($id)->status);
+    }
+
+    public function test_the_premium_in_an_approval_needs_both_amount_and_date(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.pagar_prima');
+        $employee = $this->employee(yearsAgo: 1);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        $this->postJson("/api/vacation-requests/{$id}/approve", ['premium_amount' => 1500])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['premium_paid_on']);
+    }
+
+    public function test_an_approval_cannot_pay_a_premium_twice(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.pagar_prima');
+        $employee = $this->employee(yearsAgo: 1);
+        $period = app(VacationPeriodService::class)->ensurePeriods($employee)->first();
+
+        $this->putJson("/api/vacation-periods/{$period->id}/premium", [
+            'premium_amount' => 1000,
+            'premium_paid_on' => '2026-09-10',
+        ])->assertOk();
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2026-11-09', 'ends_on' => '2026-11-13',
+        ])->json('data.id');
+
+        $this->postJson("/api/vacation-requests/{$id}/approve", [
+            'premium_amount' => 1500,
+            'premium_paid_on' => '2026-09-16',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['premium_amount']);
+
+        $this->assertEqualsWithDelta(1000, $period->fresh()->premium_amount, 0.01);
+    }
 }

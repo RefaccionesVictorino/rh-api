@@ -25,7 +25,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'sucursales' => ['ver', 'crear', 'editar', 'eliminar'],
         'turnos' => ['ver', 'crear', 'editar', 'eliminar', 'asignar'],
         'festivos' => ['ver', 'crear', 'editar', 'eliminar'],
-        'vacaciones' => ['ver', 'solicitar', 'autorizar', 'configurar'],
+        'vacaciones' => ['ver', 'solicitar', 'autorizar', 'configurar', 'pagar_prima'],
         // Incapacidades y permisos: las registra RH, no se solicitan.
         'ausencias' => ['ver', 'registrar'],
         'checador' => ['ver', 'administrar', 'extraoficial'],
@@ -59,6 +59,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'turnos.ver', 'turnos.crear', 'turnos.editar', 'turnos.asignar',
             'festivos.ver', 'festivos.crear', 'festivos.editar',
             'vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.configurar',
+            'vacaciones.pagar_prima',
             'ausencias.ver', 'ausencias.registrar',
             'checador.ver', 'checador.administrar',
             'asistencia.ver', 'asistencia.justificar',

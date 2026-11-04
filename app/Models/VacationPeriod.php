@@ -34,6 +34,10 @@ class VacationPeriod extends Model
         'adjustment_days',
         'taken_days',
         'adjustment_reason',
+        'premium_percentage',
+        'premium_amount',
+        'premium_paid_on',
+        'premium_paid_by',
     ];
 
     protected function casts(): array
@@ -42,10 +46,13 @@ class VacationPeriod extends Model
             'starts_on' => 'date:Y-m-d',
             'ends_on' => 'date:Y-m-d',
             'expires_on' => 'date:Y-m-d',
+            'premium_paid_on' => 'date:Y-m-d',
             'year_number' => 'integer',
             'entitled_days' => 'integer',
             'adjustment_days' => 'integer',
             'taken_days' => 'float',
+            'premium_percentage' => 'float',
+            'premium_amount' => 'float',
         ];
     }
 
@@ -57,6 +64,31 @@ class VacationPeriod extends Model
     public function requestDays(): HasMany
     {
         return $this->hasMany(VacationRequestDay::class);
+    }
+
+    public function premiumPaidBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'premium_paid_by');
+    }
+
+    /** La prima se paga una sola vez por periodo: pagada es tener fecha. */
+    protected function isPremiumPaid(): Attribute
+    {
+        return Attribute::get(fn (): bool => $this->premium_paid_on !== null);
+    }
+
+    /**
+     * Registra (o corrige) el pago de la prima del periodo. El porcentaje se
+     * guarda con el pago para que un cambio en el global no reescriba lo pagado.
+     */
+    public function recordPremiumPayment(float $amount, CarbonInterface $paidOn, ?int $paidBy, ?float $percentage = null): void
+    {
+        $this->update([
+            'premium_amount' => $amount,
+            'premium_paid_on' => $paidOn->toDateString(),
+            'premium_paid_by' => $paidBy,
+            'premium_percentage' => $percentage ?? config('vacations.premium_percentage'),
+        ]);
     }
 
     protected function grantedDays(): Attribute

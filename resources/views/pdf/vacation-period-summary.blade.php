@@ -73,6 +73,30 @@
   </div>
 
   <div class="section">
+    <h2 class="section-title">Prima vacacional</h2>
+    @if ($period->is_premium_paid)
+      <table class="figures">
+        <tr>
+          <td>
+            <span class="label">Pagada el</span>
+            <span class="value">{{ Format::shortDate($period->premium_paid_on) }}</span>
+          </td>
+          <td>
+            <span class="label">Monto</span>
+            <span class="value">{{ Format::money($period->premium_amount) }}</span>
+          </td>
+          <td>
+            <span class="label">Porcentaje</span>
+            <span class="value">{{ Format::percent($period->premium_percentage) }}</span>
+          </td>
+        </tr>
+      </table>
+    @else
+      <p class="note">Sin pago registrado.</p>
+    @endif
+  </div>
+
+  <div class="section">
     <h2 class="section-title">Vacaciones aprobadas</h2>
     <table class="list">
       <thead>
