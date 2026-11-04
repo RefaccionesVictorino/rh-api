@@ -746,6 +746,28 @@ class VacationTest extends TestCase
             ->assertJsonPath('data.0.starts_on', '2026-12-14');
     }
 
+    public function test_the_requests_inbox_sorts_by_seniority(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar');
+        $junior = $this->employee(yearsAgo: 2);
+        $senior = $this->employee(yearsAgo: 10);
+
+        foreach ([$junior, $senior] as $employee) {
+            $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+                'starts_on' => '2026-11-09', 'ends_on' => '2026-11-11',
+            ])->assertCreated();
+        }
+
+        $this->getJson('/api/vacations/requests?sort_by=seniority&sort_dir=desc')
+            ->assertOk()
+            ->assertJsonPath('data.0.employee_id', $senior->id)
+            ->assertJsonPath('data.0.employee_hire_date', $senior->hire_date->toDateString());
+
+        $this->getJson('/api/vacations/requests?sort_by=seniority&sort_dir=asc')
+            ->assertOk()
+            ->assertJsonPath('data.0.employee_id', $junior->id);
+    }
+
     public function test_the_requests_inbox_rejects_an_unknown_sort_column(): void
     {
         $this->actingAsUserWith('vacaciones.ver');

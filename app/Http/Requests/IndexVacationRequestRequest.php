@@ -16,6 +16,7 @@ class IndexVacationRequestRequest extends FormRequest
         'requested_days',
         'status',
         'created_at',
+        'seniority',
     ];
 
     public const DEFAULT_PER_PAGE = 25;

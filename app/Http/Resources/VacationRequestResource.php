@@ -33,6 +33,8 @@ class VacationRequestResource extends JsonResource
             'requested_at' => $this->created_at,
             'reviewed_at' => $this->reviewed_at,
             'employee' => EmployeeSummaryResource::make($this->whenLoaded('employee')),
+            // Fuera de EmployeeSummaryResource: el organigrama no la necesita.
+            'employee_hire_date' => $this->whenLoaded('employee', fn () => $this->employee->hire_date?->toDateString()),
             // Solo cuando el listado cargó la rama completa; el calendario lo
             // usa para agrupar por área sin una consulta por solicitud.
             'department' => $this->when(

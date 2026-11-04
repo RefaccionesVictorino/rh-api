@@ -66,6 +66,14 @@ class VacationRequestController extends Controller
                 Employee::select('name')->whereColumn('employees.id', 'vacation_requests.employee_id'),
                 $sortDir,
             );
+        } elseif ($sortBy === 'seniority') {
+            // Más antigüedad es ingreso más temprano: la dirección se invierte
+            // sobre hire_date. Sin fecha de ingreso van al final en ambos sentidos.
+            $hireDate = Employee::query()->whereColumn('employees.id', 'vacation_requests.employee_id');
+
+            $query
+                ->orderBy((clone $hireDate)->selectRaw('hire_date is null'))
+                ->orderBy($hireDate->select('hire_date'), $sortDir === 'asc' ? 'desc' : 'asc');
         } else {
             $query->orderBy($sortBy, $sortDir);
         }
