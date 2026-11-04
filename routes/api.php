@@ -21,6 +21,7 @@ use App\Http\Controllers\TimeClock\TimeClockController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VacationBalanceController;
 use App\Http\Controllers\VacationRequestController;
+use App\Http\Controllers\VacationRequestSheetController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -191,6 +192,15 @@ Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
         ->middleware('permission:vacaciones.autorizar');
     Route::post('/vacation-requests/{vacation_request}/cancel', [VacationRequestController::class, 'cancel'])
         ->middleware('permission:vacaciones.solicitar');
+
+    // Ficha de la solicitud (para firmarse a mano) y concentrado anual del
+    // periodo; ambos también en PDF.
+    Route::get('/vacation-requests/{vacation_request}/sheet', [VacationRequestSheetController::class, 'show'])
+        ->middleware('permission:vacaciones.ver');
+    Route::get('/vacation-requests/{vacation_request}/sheet/pdf', [VacationRequestSheetController::class, 'pdf'])
+        ->middleware('permission:vacaciones.ver');
+    Route::get('/vacation-periods/{vacation_period}/summary/pdf', [VacationRequestSheetController::class, 'periodSummaryPdf'])
+        ->middleware('permission:vacaciones.ver');
 
     Route::put('/vacation-periods/{vacation_period}/adjust', [VacationBalanceController::class, 'adjust'])
         ->middleware('permission:vacaciones.configurar');
