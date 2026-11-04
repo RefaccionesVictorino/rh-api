@@ -1,0 +1,388 @@
+<?php
+
+namespace App\Services;
+
+use App\Jobs\RecordAttendance;
+use App\Models\Employee;
+use App\Models\User;
+use App\Models\VacationPeriod;
+use App\Models\VacationRequest;
+use App\Notifications\VacationRequestSubmitted;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
+
+class VacationRequestService
+{
+    public function __construct(
+        private readonly VacationPeriodService $periods,
+        private readonly WorkingDayCalculator $workingDays,
+    ) {}
+
+    /**
+     * Días hábiles del rango y cómo se repartirían entre periodos, sin
+     * guardar nada. El frontend lo usa para mostrar el costo antes de enviar.
+     *
+     * @return array<string, mixed>
+     */
+    public function preview(
+        Employee $employee,
+        CarbonImmutable $from,
+        CarbonImmutable $to,
+        ?VacationRequest $ignoring = null,
+    ): array {
+        $days = $this->workingDays->between($employee, $from, $to);
+        $periods = $this->periods->ensurePeriods($employee, $to);
+
+        // Al reprogramar, los días que ya aparta esa solicitud vuelven a estar
+        // disponibles: se descuentan en memoria, sin tocar el periodo.
+        if ($ignoring !== null) {
+            $heldDays = $ignoring->days()->get()->groupBy('vacation_period_id')->map->sum('days');
+            $periods->each(function (VacationPeriod $period) use ($heldDays): void {
+                $period->taken_days -= $heldDays->get($period->id, 0);
+            });
+        }
+
+        $allocation = $this->allocate($days, $periods);
+
+        return [
+            'starts_on' => $from->toDateString(),
+            'ends_on' => $to->toDateString(),
+            'working_days' => $days->count(),
+            'calendar_days' => $from->diffInDays($to) + 1,
+            'dates' => $days->map(fn (CarbonImmutable $date) => $date->toDateString())->all(),
+            'available_days' => round($this->availableDaysFor($periods, $from, $to), 1),
+            'has_enough_balance' => $allocation !== null,
+            'allocation' => $allocation === null ? [] : collect($allocation)
+                ->groupBy('period_id')
+                ->map(fn (Collection $group, $periodId) => [
+                    'period_id' => (int) $periodId,
+                    'year_number' => $periods->firstWhere('id', (int) $periodId)?->year_number,
+                    'days' => $group->count(),
+                ])->values()->all(),
+        ];
+    }
+
+    public function create(
+        Employee $employee,
+        CarbonImmutable $from,
+        CarbonImmutable $to,
+        ?string $comments,
+        ?int $requestedBy,
+    ): VacationRequest {
+        $request = DB::transaction(function () use ($employee, $from, $to, $comments, $requestedBy): VacationRequest {
+            $this->guardOverlap($employee, $from, $to);
+
+            $days = $this->workingDays->between($employee, $from, $to);
+
+            if ($days->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'starts_on' => 'El periodo no incluye ningún día laborable para este empleado.',
+                ]);
+            }
+
+            $employee->vacationPeriods()->lockForUpdate()->get();
+            // Hasta el fin de la solicitud: una programada para el año que
+            // entra se carga al periodo que abra en esas fechas.
+            $periods = $this->periods->ensurePeriods($employee, $to);
+
+            $allocation = $this->allocate($days, $periods);
+
+            if ($allocation === null) {
+                throw ValidationException::withMessages([
+                    'starts_on' => sprintf(
+                        'Saldo insuficiente: la solicitud consume %d día(s) hábil(es) y hay %s disponible(s) para esas fechas.',
+                        $days->count(),
+                        rtrim(rtrim(number_format($this->availableDaysFor($periods, $from, $to), 1), '0'), '.'),
+                    ),
+                ]);
+            }
+
+            $request = $employee->vacationRequests()->create([
+                'starts_on' => $from,
+                'ends_on' => $to,
+                'requested_days' => $days->count(),
+                'status' => VacationRequest::PENDING,
+                'comments' => $comments,
+                'requested_by' => $requestedBy,
+            ]);
+
+            foreach ($allocation as $entry) {
+                $request->days()->create([
+                    'vacation_period_id' => $entry['period_id'],
+                    'date' => $entry['date'],
+                    'days' => 1,
+                ]);
+            }
+
+            $this->refreshPeriods($request);
+
+            return $request;
+        });
+
+        $this->notifyApprovers($request, $requestedBy);
+
+        return $request;
+    }
+
+    /**
+     * Fuera de la transacción: el aviso sale por la cola y no debe existir si
+     * la solicitud no se guardó. Quien la capturó no se avisa a sí mismo.
+     */
+    private function notifyApprovers(VacationRequest $request, ?int $requestedBy): void
+    {
+        // No se usa el scope permission() de Spatie: lanza excepción si el
+        // permiso no existe, y un alta no debe fallar por falta de destinatarios.
+        $hasPermission = fn (Builder $q) => $q->where('name', 'vacaciones.autorizar');
+
+        $approvers = User::query()
+            ->where(fn (Builder $q) => $q
+                ->whereHas('permissions', $hasPermission)
+                ->orWhereHas('roles.permissions', $hasPermission))
+            ->when($requestedBy, fn (Builder $q, int $id) => $q->whereKeyNot($id))
+            ->get();
+
+        Notification::send($approvers, new VacationRequestSubmitted($request));
+    }
+
+    /**
+     * Con fechas distintas a las pedidas, RH reprograma al aprobar: se
+     * conservan las originales y los días se vuelven a cargar contra el saldo.
+     */
+    public function approve(
+        VacationRequest $request,
+        ?int $reviewedBy,
+        ?CarbonImmutable $from = null,
+        ?CarbonImmutable $to = null,
+        ?string $rescheduleReason = null,
+    ): VacationRequest {
+        $this->guardPending($request);
+
+        $request = DB::transaction(function () use ($request, $reviewedBy, $from, $to, $rescheduleReason): VacationRequest {
+            if ($from !== null && $to !== null && $this->changesDates($request, $from, $to)) {
+                $this->reschedule($request, $from, $to, $rescheduleReason);
+            }
+
+            $request->update([
+                'status' => VacationRequest::APPROVED,
+                'reviewed_by' => $reviewedBy,
+                'reviewed_at' => now(),
+            ]);
+
+            return $request;
+        });
+
+        // Vacaciones aprobadas con fecha pasada: esos días dejan de ser faltas.
+        RecordAttendance::forEmployee($request->employee_id, $request->starts_on, $request->ends_on);
+
+        return $request;
+    }
+
+    private function changesDates(VacationRequest $request, CarbonImmutable $from, CarbonImmutable $to): bool
+    {
+        return $from->toDateString() !== $request->starts_on->toDateString()
+            || $to->toDateString() !== $request->ends_on->toDateString();
+    }
+
+    private function reschedule(
+        VacationRequest $request,
+        CarbonImmutable $from,
+        CarbonImmutable $to,
+        ?string $reason,
+    ): void {
+        $employee = $request->employee;
+
+        $this->guardOverlap($employee, $from, $to, exceptId: $request->id);
+
+        $days = $this->workingDays->between($employee, $from, $to);
+
+        if ($days->isEmpty()) {
+            throw ValidationException::withMessages([
+                'starts_on' => 'El periodo no incluye ningún día laborable para este empleado.',
+            ]);
+        }
+
+        $employee->vacationPeriods()->lockForUpdate()->get();
+
+        // Los días que apartaba se liberan antes de reasignar; si el saldo no
+        // alcanza, la excepción revierte la transacción y vuelven a su lugar.
+        $this->releaseDays($request);
+
+        $periods = $this->periods->ensurePeriods($employee, $to);
+        $allocation = $this->allocate($days, $periods);
+
+        if ($allocation === null) {
+            throw ValidationException::withMessages([
+                'starts_on' => sprintf(
+                    'Saldo insuficiente: las nuevas fechas consumen %d día(s) hábil(es) y hay %s disponible(s).',
+                    $days->count(),
+                    rtrim(rtrim(number_format($this->availableDaysFor($periods, $from, $to), 1), '0'), '.'),
+                ),
+            ]);
+        }
+
+        $request->update([
+            'requested_starts_on' => $request->starts_on,
+            'requested_ends_on' => $request->ends_on,
+            'starts_on' => $from,
+            'ends_on' => $to,
+            'requested_days' => $days->count(),
+            'reschedule_reason' => $reason,
+        ]);
+
+        foreach ($allocation as $entry) {
+            $request->days()->create([
+                'vacation_period_id' => $entry['period_id'],
+                'date' => $entry['date'],
+                'days' => 1,
+            ]);
+        }
+
+        $this->refreshPeriods($request);
+    }
+
+    private function releaseDays(VacationRequest $request): void
+    {
+        $periodIds = $request->days()->distinct()->pluck('vacation_period_id');
+
+        $request->days()->delete();
+
+        VacationPeriod::whereIn('id', $periodIds)->get()->each->recalculateTakenDays();
+    }
+
+    public function reject(VacationRequest $request, ?int $reviewedBy, ?string $reason): VacationRequest
+    {
+        $this->guardPending($request);
+
+        return DB::transaction(function () use ($request, $reviewedBy, $reason): VacationRequest {
+            $request->update([
+                'status' => VacationRequest::REJECTED,
+                'reviewed_by' => $reviewedBy,
+                'reviewed_at' => now(),
+                'rejection_reason' => $reason,
+            ]);
+
+            $this->refreshPeriods($request);
+
+            return $request;
+        });
+    }
+
+    public function cancel(VacationRequest $request, ?int $reviewedBy): VacationRequest
+    {
+        if (! $request->canBeCancelled()) {
+            throw ValidationException::withMessages([
+                'status' => 'Solo se pueden cancelar solicitudes pendientes o aprobadas.',
+            ]);
+        }
+
+        $wasApproved = $request->status === VacationRequest::APPROVED;
+
+        $request = DB::transaction(function () use ($request, $reviewedBy): VacationRequest {
+            $request->update([
+                'status' => VacationRequest::CANCELLED,
+                'reviewed_by' => $reviewedBy,
+                'reviewed_at' => now(),
+            ]);
+
+            $this->refreshPeriods($request);
+
+            return $request;
+        });
+
+        if ($wasApproved) {
+            RecordAttendance::forEmployee($request->employee_id, $request->starts_on, $request->ends_on);
+        }
+
+        return $request;
+    }
+
+    /**
+     * Carga cada día al periodo en curso en esa fecha, no en la de hoy: así
+     * se programan vacaciones contra un periodo que todavía no abre, y una
+     * solicitud que cruza el aniversario se reparte entre los dos. Lo que
+     * sobró de periodos anteriores nunca entra aquí.
+     *
+     * Devuelve null si el saldo no alcanza.
+     *
+     * @param  Collection<int, CarbonImmutable>  $days
+     * @param  Collection<int, VacationPeriod>  $periods
+     * @return list<array{date: CarbonImmutable, period_id: int}>|null
+     */
+    private function allocate(Collection $days, Collection $periods): ?array
+    {
+        $balances = $periods->mapWithKeys(fn (VacationPeriod $period) => [$period->id => $period->remaining_days]);
+
+        $allocation = [];
+
+        foreach ($days as $date) {
+            $period = $periods->first(fn (VacationPeriod $period) => $period->coversDate($date));
+
+            if ($period === null || $balances[$period->id] < 1) {
+                return null;
+            }
+
+            $balances[$period->id] -= 1;
+            $allocation[] = ['date' => $date, 'period_id' => $period->id];
+        }
+
+        return $allocation;
+    }
+
+    /**
+     * Saldo que alcanza a las fechas pedidas: la suma de los periodos en
+     * curso en algún día del rango.
+     *
+     * @param  Collection<int, VacationPeriod>  $periods
+     */
+    private function availableDaysFor(Collection $periods, CarbonImmutable $from, CarbonImmutable $to): float
+    {
+        return $periods
+            ->filter(fn (VacationPeriod $period) => $period->starts_on->lte($to) && $period->ends_on->gte($from))
+            ->sum(fn (VacationPeriod $period) => max($period->remaining_days, 0));
+    }
+
+    private function guardOverlap(
+        Employee $employee,
+        CarbonImmutable $from,
+        CarbonImmutable $to,
+        ?int $exceptId = null,
+    ): void {
+        $overlapping = $employee->vacationRequests()
+            ->consuming()
+            ->when($exceptId !== null, fn ($q) => $q->whereKeyNot($exceptId))
+            ->whereDate('starts_on', '<=', $to->toDateString())
+            ->whereDate('ends_on', '>=', $from->toDateString())
+            ->first();
+
+        if ($overlapping !== null) {
+            throw ValidationException::withMessages([
+                'starts_on' => sprintf(
+                    'Ya hay una solicitud %s del %s al %s que se traslapa.',
+                    mb_strtolower($overlapping->status_label),
+                    $overlapping->starts_on->toDateString(),
+                    $overlapping->ends_on->toDateString(),
+                ),
+            ]);
+        }
+    }
+
+    private function guardPending(VacationRequest $request): void
+    {
+        if (! $request->isPending()) {
+            throw ValidationException::withMessages([
+                'status' => 'La solicitud ya fue '.mb_strtolower($request->status_label).'.',
+            ]);
+        }
+    }
+
+    private function refreshPeriods(VacationRequest $request): void
+    {
+        VacationPeriod::whereIn('id', $request->days()->distinct()->pluck('vacation_period_id'))
+            ->get()
+            ->each->recalculateTakenDays();
+    }
+}

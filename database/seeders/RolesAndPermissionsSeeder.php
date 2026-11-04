@@ -1,0 +1,85 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
+
+class RolesAndPermissionsSeeder extends Seeder
+{
+    /**
+     * Permisos base del sistema. Agrega aquí los módulos conforme crezca el proyecto.
+     *
+     * @var array<string, list<string>>
+     */
+    private array $permissions = [
+        'usuarios' => ['ver', 'crear', 'editar', 'eliminar'],
+        'roles' => ['ver', 'crear', 'editar', 'eliminar'],
+        // eliminar = dar de baja. Reactivar queda solo en admin.
+        'empleados' => ['ver', 'crear', 'editar', 'eliminar', 'reactivar'],
+        'areas' => ['ver', 'crear', 'editar', 'eliminar'],
+        'subareas' => ['ver', 'crear', 'editar', 'eliminar'],
+        'sucursales' => ['ver', 'crear', 'editar', 'eliminar'],
+        'turnos' => ['ver', 'crear', 'editar', 'eliminar', 'asignar'],
+        'festivos' => ['ver', 'crear', 'editar', 'eliminar'],
+        'vacaciones' => ['ver', 'solicitar', 'autorizar', 'configurar', 'pagar_prima'],
+        // Incapacidades y permisos: las registra RH, no se solicitan.
+        'ausencias' => ['ver', 'registrar'],
+        'checador' => ['ver', 'administrar', 'extraoficial'],
+        // Incidencias de asistencia (retardos, faltas) y su justificación.
+        'asistencia' => ['ver', 'justificar'],
+    ];
+
+    public function run(): void
+    {
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $all = [];
+        foreach ($this->permissions as $module => $actions) {
+            foreach ($actions as $action) {
+                $all[] = Permission::firstOrCreate([
+                    'name' => "{$module}.{$action}",
+                    'guard_name' => 'web',
+                ])->name;
+            }
+        }
+
+        $admin = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $admin->syncPermissions($all);
+
+        $rh = Role::firstOrCreate(['name' => 'rh', 'guard_name' => 'web']);
+        $rh->syncPermissions([
+            'empleados.ver', 'empleados.crear', 'empleados.editar', 'empleados.eliminar',
+            'areas.ver', 'areas.crear', 'areas.editar',
+            'subareas.ver', 'subareas.crear', 'subareas.editar',
+            'sucursales.ver', 'sucursales.crear', 'sucursales.editar',
+            'turnos.ver', 'turnos.crear', 'turnos.editar', 'turnos.asignar',
+            'festivos.ver', 'festivos.crear', 'festivos.editar',
+            'vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar', 'vacaciones.configurar',
+            'vacaciones.pagar_prima',
+            'ausencias.ver', 'ausencias.registrar',
+            'checador.ver', 'checador.administrar',
+            'asistencia.ver', 'asistencia.justificar',
+        ]);
+
+        // Sus asignaciones de turno se recortan a la parte del organigrama que
+        // cuelga de su trabajador (ver OrgChartScope).
+        $areaManager = Role::firstOrCreate(['name' => 'jefe_area', 'guard_name' => 'web']);
+        $areaManager->syncPermissions([
+            'empleados.ver',
+            'turnos.ver', 'turnos.crear', 'turnos.asignar',
+            'ausencias.ver',
+        ]);
+
+        Role::firstOrCreate(['name' => 'empleado', 'guard_name' => 'web']);
+
+        $user = User::firstOrCreate(
+            ['email' => 'seevaaluu@gmail.com'],
+            ['name' => 'Administrador', 'password' => 'password']
+        );
+        $user->syncRoles(['admin']);
+    }
+}

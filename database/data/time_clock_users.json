@@ -1,0 +1,386 @@
+[
+    {
+        "pin": "EOGA980330FV0",
+        "name": "ABRAHAM GEOVANI ESCOBEDO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "RIRC010328FA2",
+        "name": "ALAN RIVERA ROSALES",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AICA920903HX9",
+        "name": "ALEXIS EDISEL ADRIANO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AAOA940718BR7",
+        "name": "ALLAN JOSUE ALVAREZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "VIAA910622FD0",
+        "name": "ALMA LILIA VILLA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GARA061007MD5",
+        "name": "ANDREA LIZZETH GARVALENA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "MADB051023KA6",
+        "name": "BRAYAN IVAN MARTINEZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "MODB051111KK0",
+        "name": "BRISA LIZBETH MONTIEL",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "ROIC9808269H6",
+        "name": "CARLOS JESUS ROSALES",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "OAAC960104NS4",
+        "name": "CESAR DANIEL ORDAZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "RIGC950811HDG",
+        "name": "CHRISTIAN MISAEL RIVERA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "RUGC020613DTA",
+        "name": "CHRISTOPHER EMMANUEL...",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "TOQE960923AE7",
+        "name": "EDUARDO ANTONIO TORRES",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AABE000705SJ6",
+        "name": "ERICK JARED ALVARADO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "OAGE830428S45",
+        "name": "ERNESTO ORDAZ GOMEZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GAPE9403106P8",
+        "name": "EVELYN GARCIA PAEZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "VAGF850111H48",
+        "name": "FERNANDO ULISES VALE...",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AAEF701004971",
+        "name": "FRANCISCO ALVAREZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "SAGF78061773A",
+        "name": "FRANCISCO JAVIER DE ...",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "DICG591117KJ8",
+        "name": "GREGORIO DIAZ CITAL",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "BEBH9408181Z5",
+        "name": "HECTOR MANUEL BETANCOURT",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "RACJ900103HJ7",
+        "name": "JESUS ALBERTO RAMIREZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "EOCJ010702GG4",
+        "name": "JESUS ESCOBEDO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "HECJ070827DK3",
+        "name": "JESUS MIGUEL HERNANDEZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AAOJ870728873",
+        "name": "JEZRREL AMAYA OROZCO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "CAGJ020328GU8",
+        "name": "JONATHAN ISRAEL CARRASCO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "PAOJ001016CR5",
+        "name": "JORGE PAREDES ORTEGA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GACF820806DN3",
+        "name": "JOSE FERNANDO GRACIA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AUML910817P75",
+        "name": "JOSE LUIS ANGUIANO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "TOEM970226228",
+        "name": "JOSE MANUEL TORRES",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "FEOM070876IW1",
+        "name": "JOSE MARIA FERMAN",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GUCJ0303089Y5",
+        "name": "JOVANI ALEXANDER GUT...",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "SOEJ950209HSA",
+        "name": "JUAN ANTONIO SOSA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "ROCJ0306209Y2",
+        "name": "JUAN CARLOS ROCHA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "CARJ920623KE6",
+        "name": "JUAN MANUEL CAMACHO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "OIVJ960902UG9",
+        "name": "JUAN MANUEL ORTIZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "PIAK960907K92",
+        "name": "KAREN VIANEY PINEDA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "MOCL000120FCA",
+        "name": "LEIBER ELIGIO MORALES",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AAGL990523CZ8",
+        "name": "LETICIA ALVAREZ GARAY",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "COGL821107NW5",
+        "name": "LUIS MIGUEL CONTRERAS",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "DIGL020121NK8",
+        "name": "LUNA DALAI DIAZ GARCIA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GORM810321E84",
+        "name": "MANUEL GONZALEZ RIVERA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AALM050922NY5",
+        "name": "MANUEL ISIDRO ALMARAZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "LOVC9005297X7",
+        "name": "MARIA DEL CARMEN LOPEZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AEDM940728IU5",
+        "name": "MARTIN ALEJANDRO ARE...",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GOVM980803UQ9",
+        "name": "MIGUEL ANGEL GONZALEZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GOSM710520IA0",
+        "name": "MIGUEL ANGEL GONZALEZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GAOM680325KN5",
+        "name": "MIGUEL ANGEL GRACIA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "ROXN890128NJ1",
+        "name": "NADYA ROMERO -",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "RIAN900429DL3",
+        "name": "NATAN RIOS ATAYDE",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AETN871015UJ6",
+        "name": "NOE JARET ALEMAN TRETO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "RONN920606315",
+        "name": "NOEL GERMAN ROMERO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "BACN9203117E5",
+        "name": "NOHEMI BARRAZA CARBAJAL",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "MOAO840421117",
+        "name": "OMAR MONTIEL ARROYO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "OIOM980524EW8",
+        "name": "OMAR ORTIZ GARCIA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "OISO810823IX4",
+        "name": "OSCAR ANTONIO OLIVAS",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "ROAR850403FG8",
+        "name": "RICARDO IVAN ROCHA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "AIRS970227C50",
+        "name": "SALMA VICTORIA AVILA",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "HELS8906091M4",
+        "name": "SALVADOR HERNANDEZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "NATS841222NR4",
+        "name": "SAMUEL NARANJO TERRONES",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "GAAS970929HD3",
+        "name": "SEBASTIAN ISMAEL GAMIZ",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "6767",
+        "name": "Sergio",
+        "card_number": null,
+        "privilege": 14
+    },
+    {
+        "pin": "ROTU920311IJ9",
+        "name": "URIEL RODRIGUEZ TAMAYO",
+        "card_number": null,
+        "privilege": 0
+    },
+    {
+        "pin": "MEAW95032HDG",
+        "name": "WILLY MELENDEZ ALVAREZ",
+        "card_number": null,
+        "privilege": 0
+    }
+]

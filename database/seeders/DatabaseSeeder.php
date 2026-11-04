@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -15,11 +14,22 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $this->call([
+            RolesAndPermissionsSeeder::class,
+            // Catálogo, no datos de prueba: corre en todos los ambientes.
+            DepartmentSeeder::class,
+            LocationSeeder::class,
+            HolidaySeeder::class,
+            VacationEntitlementSeeder::class,
         ]);
+
+        // Datos de prueba: el seeder se omite solo fuera de local.
+        $this->call(EmployeesTableSeeder::class);
+
+        // Ubica esa plantilla en el organigrama; depende de los dos anteriores.
+        $this->call(OrgChartAssignmentSeeder::class);
+
+        // Necesita a la plantilla ya ubicada: reparte las solicitudes entre áreas.
+        $this->call(VacationRequestSeeder::class);
     }
 }
