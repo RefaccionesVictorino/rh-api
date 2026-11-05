@@ -29,7 +29,7 @@ class UpdateHolidayRequest extends FormRequest
                 'sometimes',
                 'required',
                 'date_format:Y-m-d',
-                Rule::unique('holidays', 'date')->ignore($holiday->id),
+                Rule::unique('holidays', 'date')->ignore($holiday->id)->whereNull('deleted_at'),
             ],
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'observance' => ['sometimes', 'required', Rule::in(array_keys(Holiday::OBSERVANCES))],

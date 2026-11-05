@@ -163,6 +163,12 @@ class ZkPushProtocol
                 continue;
             }
 
+            // En este checador el PIN es el RFC del trabajador: si RH ya
+            // capturó al empleado, se liga solo, sin captura adicional.
+            $employeeId = Employee::where('rfc', $data['PIN'])->value('id');
+
+            TimeClockUser::releaseTrashed($data['PIN'], $employeeId);
+
             $user = TimeClockUser::firstOrNew(['pin' => $data['PIN']]);
             $user->fill([
                 'name' => $this->valueOrNull($data['Name'] ?? null) ?? ('Usuario '.$data['PIN']),
@@ -171,9 +177,7 @@ class ZkPushProtocol
                 'synced_at' => now(),
             ]);
 
-            // En este checador el PIN es el RFC del trabajador: si RH ya
-            // capturó al empleado, se liga solo, sin captura adicional.
-            $user->employee_id ??= Employee::where('rfc', $data['PIN'])->value('id');
+            $user->employee_id ??= $employeeId;
             $user->save();
 
             $processed++;

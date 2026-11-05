@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Festivo que se repite cada año. La fecha no se guarda: se calcula para el
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class HolidayRule extends Model
 {
-    use HasObservance, HasWorkWindow;
+    use HasObservance, HasWorkWindow, SoftDeletes;
 
     /** Mismo día y mes todos los años. */
     public const FIXED = 'fixed';

@@ -41,7 +41,11 @@ class HolidayController extends Controller
 
     public function store(StoreHolidayRequest $request): JsonResponse
     {
-        $holiday = Holiday::create($request->payload());
+        $payload = $request->payload();
+
+        $this->releaseTrashedDate($payload['date']);
+
+        $holiday = Holiday::create($payload);
 
         RecordAttendance::forDate($holiday->date);
 
@@ -58,8 +62,13 @@ class HolidayController extends Controller
     public function update(UpdateHolidayRequest $request, Holiday $holiday): HolidayResource
     {
         $previousDate = $holiday->date;
+        $payload = $request->payload();
 
-        $holiday->update($request->payload());
+        if (isset($payload['date'])) {
+            $this->releaseTrashedDate($payload['date']);
+        }
+
+        $holiday->update($payload);
 
         RecordAttendance::forDate($previousDate);
 
@@ -77,5 +86,11 @@ class HolidayController extends Controller
         RecordAttendance::forDate($holiday->date);
 
         return response()->json(status: 204);
+    }
+
+    /** Un festivo borrado seguiría ocupando su fecha en el índice único. */
+    private function releaseTrashedDate(string $date): void
+    {
+        Holiday::onlyTrashed()->whereDate('date', $date)->forceDelete();
     }
 }

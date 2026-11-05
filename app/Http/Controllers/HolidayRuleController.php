@@ -10,6 +10,7 @@ use App\Models\HolidayRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class HolidayRuleController extends Controller
 {
@@ -62,7 +63,11 @@ class HolidayRuleController extends Controller
      */
     public function destroy(HolidayRule $holidayRule): JsonResponse
     {
-        $holidayRule->delete();
+        // El borrado lógico no dispara el cascadeOnDelete de la llave.
+        DB::transaction(function () use ($holidayRule): void {
+            $holidayRule->exceptions()->delete();
+            $holidayRule->delete();
+        });
 
         $this->recordCurrentYear($holidayRule);
 

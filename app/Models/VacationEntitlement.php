@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Tabulador de días de vacaciones por antigüedad, artículo 76 de la Ley
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class VacationEntitlement extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = ['from_year', 'to_year', 'days'];
 
     protected function casts(): array

@@ -116,7 +116,9 @@ class VacationBalanceController extends Controller
         }
 
         DB::transaction(function () use ($rows): void {
-            VacationEntitlement::query()->delete();
+            // Físico: el tabulador se reemplaza completo y un renglón en
+            // papelera seguiría ocupando su from_year en el índice único.
+            VacationEntitlement::withTrashed()->forceDelete();
 
             foreach ($rows as $row) {
                 VacationEntitlement::create($row);

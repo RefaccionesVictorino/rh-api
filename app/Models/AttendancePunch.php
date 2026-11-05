@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Checada cruda. Es evidencia: no se edita ni se borra desde la aplicación.
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class AttendancePunch extends Model
 {
+    use SoftDeletes;
+
     public const TYPE_IN = 0;
 
     public const TYPE_OUT = 1;

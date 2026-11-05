@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Día festivo con fecha propia: los de la empresa (inventario, aniversario) y
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Holiday extends Model
 {
-    use HasObservance, HasWorkWindow;
+    use HasObservance, HasWorkWindow, SoftDeletes;
 
     protected $fillable = [
         'holiday_rule_id',

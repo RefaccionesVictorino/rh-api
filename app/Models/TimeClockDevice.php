@@ -6,9 +6,12 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TimeClockDevice extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'serial_number', 'location_id', 'name', 'location', 'model', 'firmware',
         'ip_address', 'is_active', 'att_log_stamp', 'op_log_stamp', 'last_seen_at',

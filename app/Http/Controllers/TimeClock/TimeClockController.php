@@ -119,6 +119,7 @@ class TimeClockController extends Controller
                     ->from('employee_shifts')
                     ->whereColumn('employee_shifts.employee_id', 'attendance_punches.employee_id')
                     ->where('employee_shifts.shift_id', $v)
+                    ->whereNull('employee_shifts.deleted_at')
                     // DATE() en ambos lados: SQLite guarda la fecha con hora y
                     // la comparación cruda sería entre cadenas de distinto largo.
                     ->whereRaw('DATE(employee_shifts.starts_on) <= DATE(attendance_punches.punched_at)')
@@ -241,7 +242,11 @@ class TimeClockController extends Controller
      */
     public function storeUser(StoreTimeClockUserRequest $request): JsonResponse
     {
-        $user = TimeClockUser::create($request->validated());
+        $data = $request->validated();
+
+        TimeClockUser::releaseTrashed($data['pin'], $data['employee_id'] ?? null);
+
+        $user = TimeClockUser::create($data);
 
         $queued = $this->forEachActiveDevice(
             fn (TimeClockDevice $device) => $this->commands->upsertUser($device, $user)

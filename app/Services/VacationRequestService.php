@@ -248,7 +248,9 @@ class VacationRequestService
     {
         $periodIds = $request->days()->distinct()->pluck('vacation_period_id');
 
-        $request->days()->delete();
+        // Físico: el reparto se reconstruye y un día en papelera seguiría
+        // ocupando su fecha en el índice único de la solicitud.
+        $request->days()->forceDelete();
 
         VacationPeriod::whereIn('id', $periodIds)->get()->each->recalculateTakenDays();
     }

@@ -99,7 +99,12 @@ class ScheduleOverrideTest extends TestCase
 
         $this->deleteJson("/api/schedule-overrides/{$id}")->assertNoContent();
 
-        $this->assertDatabaseCount('schedule_overrides', 0);
+        $this->assertSoftDeleted('schedule_overrides', ['id' => $id]);
+
+        // La excepción borrada no estorba para volver a capturar ese día.
+        $this->postJson("/api/employees/{$employee->id}/schedule-overrides", [
+            'date' => '2026-12-24', 'is_rest_day' => true,
+        ])->assertCreated();
     }
 
     public function test_requires_permission(): void

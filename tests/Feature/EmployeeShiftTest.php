@@ -279,7 +279,7 @@ class EmployeeShiftTest extends TestCase
 
         $this->deleteJson("/api/shift-assignments/{$id}")->assertNoContent();
 
-        $this->assertDatabaseCount('employee_shifts', 0);
+        $this->assertSoftDeleted('employee_shifts', ['id' => $id]);
     }
 
     public function test_denies_assignment_without_the_permission(): void

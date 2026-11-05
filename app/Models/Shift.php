@@ -72,15 +72,12 @@ class Shift extends Model
         $byWeekday = collect($days)->keyBy(fn (array $day) => (int) $day['weekday']);
 
         DB::transaction(function () use ($byWeekday): void {
-            $this->days()->delete();
-
             foreach (ShiftDay::WEEKDAYS as $weekday => $name) {
                 $day = $byWeekday->get($weekday);
 
                 $rest = $day === null || (bool) ($day['is_rest_day'] ?? false);
 
-                $this->days()->create([
-                    'weekday' => $weekday,
+                $this->days()->updateOrCreate(['weekday' => $weekday], [
                     'is_rest_day' => $rest,
                     'start_time' => $rest ? null : $day['start_time'],
                     'end_time' => $rest ? null : $day['end_time'],

@@ -34,6 +34,8 @@ class EmployeeRegistrationService
             $employee = Employee::create($attributes);
             $employee->syncEmergencyContacts($emergencyContacts);
 
+            TimeClockUser::releaseTrashed($employee->rfc);
+
             $user = TimeClockUser::create([
                 // El RFC es el PIN con el que checa. Cabe en la columna (20) y
                 // ya se validó único contra time_clock_users.
