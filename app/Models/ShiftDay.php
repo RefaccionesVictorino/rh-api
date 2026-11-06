@@ -6,10 +6,11 @@ use App\Models\Concerns\HasWorkWindow;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ShiftDay extends Model
 {
-    use HasWorkWindow;
+    use HasWorkWindow, SoftDeletes;
 
     /** Nombres de los días, indexados igual que Carbon::dayOfWeek. */
     public const WEEKDAYS = [

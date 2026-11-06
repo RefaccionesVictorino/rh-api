@@ -127,7 +127,7 @@ class EmployeeTerminationTest extends TestCase
         $this->terminate($employee)->assertOk();
 
         $this->assertTrue($current->refresh()->ends_on->isSameDay(today()));
-        $this->assertModelMissing($future);
+        $this->assertSoftDeleted($future);
     }
 
     public function test_the_areas_it_managed_are_left_without_a_manager(): void

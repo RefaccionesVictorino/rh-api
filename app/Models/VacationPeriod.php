@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Periodo vacacional de un año de servicio, generado en cada aniversario de
@@ -21,6 +22,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class VacationPeriod extends Model
 {
+    use SoftDeletes;
+
     /** Meses de gracia del artículo 81 tras el año en que se disfrutan. */
     public const MONTHS_TO_EXPIRE = 6;
 

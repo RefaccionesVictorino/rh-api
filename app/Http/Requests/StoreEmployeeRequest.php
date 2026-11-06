@@ -57,7 +57,7 @@ class StoreEmployeeRequest extends FormRequest
                 Rule::unique('employees', 'rfc')->whereNull('deleted_at'),
                 // El RFC se usa como PIN del checador: si ya existe un usuario
                 // con ese PIN el alta fallaría a medias, así que se detiene aquí.
-                Rule::unique('time_clock_users', 'pin'),
+                Rule::unique('time_clock_users', 'pin')->whereNull('deleted_at'),
             ],
             'curp' => [
                 'required', 'string', 'size:18',

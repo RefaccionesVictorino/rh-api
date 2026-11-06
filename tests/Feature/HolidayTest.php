@@ -98,6 +98,19 @@ class HolidayTest extends TestCase
             ->assertJsonValidationErrors(['date']);
     }
 
+    public function test_a_deleted_holiday_frees_its_date(): void
+    {
+        $this->actingAsUserWith('festivos.crear', 'festivos.eliminar');
+
+        $payload = ['date' => '2026-12-25', 'name' => 'Navidad', 'observance' => Holiday::REST];
+
+        $id = $this->postJson('/api/holidays', $payload)->assertCreated()->json('data.id');
+        $this->deleteJson("/api/holidays/{$id}")->assertNoContent();
+
+        $this->assertSoftDeleted('holidays', ['id' => $id]);
+        $this->postJson('/api/holidays', $payload)->assertCreated();
+    }
+
     public function test_switching_to_rest_clears_the_special_hours(): void
     {
         $this->actingAsUserWith('festivos.crear', 'festivos.editar');

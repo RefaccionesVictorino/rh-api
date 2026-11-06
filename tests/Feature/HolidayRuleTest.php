@@ -125,6 +125,25 @@ class HolidayRuleTest extends TestCase
         $this->assertArrayHasKey('2028-01-01', $this->calendarFor(2028));
     }
 
+    public function test_deleting_a_rule_also_deletes_its_exceptions(): void
+    {
+        $this->actingAsUserWith('festivos.eliminar');
+
+        $rule = $this->newYearRule();
+        $exception = Holiday::create([
+            'holiday_rule_id' => $rule->id,
+            'date' => '2027-01-02',
+            'name' => 'Año Nuevo recorrido',
+            'observance' => Holiday::REST,
+        ]);
+
+        $this->deleteJson("/api/holiday-rules/{$rule->id}")->assertNoContent();
+
+        $this->assertSoftDeleted($rule);
+        $this->assertSoftDeleted($exception);
+        $this->assertArrayNotHasKey('2027-01-02', $this->calendarFor(2027));
+    }
+
     public function test_an_exception_can_change_the_observance_of_one_year(): void
     {
         $rule = $this->newYearRule();

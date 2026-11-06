@@ -38,6 +38,9 @@ class ScheduleOverrideController extends Controller
     {
         $data = $request->payload();
 
+        // Una excepción borrada seguiría ocupando (employee_id, date) en el índice único.
+        $employee->scheduleOverrides()->onlyTrashed()->whereDate('date', $data['date'])->forceDelete();
+
         $override = $employee->scheduleOverrides()->updateOrCreate(
             ['date' => $data['date']],
             $data + ['created_by' => $request->user()?->id],

@@ -294,8 +294,13 @@ class TimeClockTest extends TestCase
 
         $this->deleteJson("/api/time-clock/users/{$userId}")->assertStatus(202);
 
-        $this->assertDatabaseCount('time_clock_users', 0);
+        $this->assertSoftDeleted('time_clock_users', ['id' => $userId]);
         $this->assertSame(2, TimeClockCommand::where('type', 'user_delete')->count());
+
+        // El usuario borrado libera su PIN y su empleado para un alta nueva.
+        $this->postJson('/api/time-clock/users', [
+            'pin' => '1001', 'name' => 'Ana López', 'employee_id' => $employee->id,
+        ])->assertStatus(202);
     }
 
     public function test_executes_named_commands_only(): void

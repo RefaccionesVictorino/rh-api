@@ -7,10 +7,11 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ScheduleOverride extends Model
 {
-    use HasWorkWindow;
+    use HasWorkWindow, SoftDeletes;
 
     protected $fillable = [
         'employee_id',

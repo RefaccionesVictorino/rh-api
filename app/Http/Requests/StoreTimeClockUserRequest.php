@@ -19,7 +19,7 @@ class StoreTimeClockUserRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'pin' => ['required', 'string', 'max:20', 'unique:time_clock_users,pin'],
+            'pin' => ['required', 'string', 'max:20', Rule::unique('time_clock_users', 'pin')->whereNull('deleted_at')],
             'name' => ['required', 'string', 'max:60'],
             'card_number' => ['nullable', 'string', 'max:20'],
             'password' => ['nullable', 'string', 'max:8'],
@@ -29,7 +29,7 @@ class StoreTimeClockUserRequest extends FormRequest
                 'integer',
                 Rule::exists('employees', 'id')->whereNull('deleted_at'),
                 // Un empleado, un usuario de checador.
-                Rule::unique('time_clock_users', 'employee_id'),
+                Rule::unique('time_clock_users', 'employee_id')->whereNull('deleted_at'),
             ],
         ];
     }

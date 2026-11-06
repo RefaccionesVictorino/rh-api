@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class VacationRequestDay extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = ['vacation_request_id', 'vacation_period_id', 'date', 'days'];
 
     protected function casts(): array

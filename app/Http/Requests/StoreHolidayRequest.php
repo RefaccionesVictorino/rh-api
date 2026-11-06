@@ -23,14 +23,14 @@ class StoreHolidayRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'date' => ['required', 'date_format:Y-m-d', Rule::unique('holidays', 'date')],
+            'date' => ['required', 'date_format:Y-m-d', Rule::unique('holidays', 'date')->whereNull('deleted_at')],
             'name' => ['required', 'string', 'max:255'],
             'observance' => ['required', Rule::in(array_keys(Holiday::OBSERVANCES))],
             'is_mandatory' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:255'],
             // Presente cuando el día es la excepción de un año sobre una regla
             // del catálogo; ausente en los días propios de la empresa.
-            'holiday_rule_id' => ['nullable', 'integer', Rule::exists('holiday_rules', 'id')],
+            'holiday_rule_id' => ['nullable', 'integer', Rule::exists('holiday_rules', 'id')->whereNull('deleted_at')],
         ] + $this->hourRules();
     }
 

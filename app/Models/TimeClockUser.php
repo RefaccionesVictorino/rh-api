@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Usuario del checador. El PIN es global: el mismo usuario checa en cualquier
@@ -13,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class TimeClockUser extends Model
 {
+    use SoftDeletes;
+
     public const PRIVILEGE_USER = 0;
 
     public const PRIVILEGE_ADMIN = 14;
@@ -55,5 +59,18 @@ class TimeClockUser extends Model
     public function isAdmin(): bool
     {
         return $this->privilege === self::PRIVILEGE_ADMIN;
+    }
+
+    /**
+     * Un usuario borrado sigue ocupando su PIN y su empleado en los índices
+     * únicos; se elimina en definitiva antes de que otro alta los reutilice.
+     */
+    public static function releaseTrashed(string $pin, ?int $employeeId = null): void
+    {
+        static::onlyTrashed()
+            ->where(fn (Builder $query) => $query
+                ->where('pin', $pin)
+                ->when($employeeId !== null, fn (Builder $query) => $query->orWhere('employee_id', $employeeId)))
+            ->forceDelete();
     }
 }

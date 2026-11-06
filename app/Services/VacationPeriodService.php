@@ -19,6 +19,9 @@ use Illuminate\Support\Collection;
  * aniversarios nuevos y los sobrantes se eliminan. Un periodo con días tomados
  * nunca se borra, para no desaparecer vacaciones ya disfrutadas sin que nadie
  * se entere; queda huérfano y se reporta.
+ *
+ * Los sobrantes se borran en físico: se regeneran con el mismo año de servicio
+ * y uno en papelera seguiría ocupando el índice único (employee_id, year_number).
  */
 class VacationPeriodService
 {
@@ -73,7 +76,7 @@ class VacationPeriodService
                 && $dates['ends_on']->lt($startDate)
                 && ($period === null || $period->taken_days == 0)
             ) {
-                $period?->delete();
+                $period?->forceDelete();
                 $yearNumber++;
 
                 continue;
@@ -207,7 +210,7 @@ class VacationPeriodService
             ->filter(fn (VacationPeriod $period) => $period->year_number > $lastYearNumber)
             ->each(function (VacationPeriod $period) use ($hireDate): void {
                 if ($period->taken_days == 0) {
-                    $period->delete();
+                    $period->forceDelete();
                 } elseif ($this->isAligned($period, $hireDate)) {
                     $changes = $this->realignedDates($period, $this->datesForYear($hireDate, $period->year_number));
 
