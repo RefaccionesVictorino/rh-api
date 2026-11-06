@@ -390,6 +390,33 @@ class VacationTest extends TestCase
         $this->assertEqualsWithDelta(14, $response->json('data.available_days'), 0.01);
     }
 
+    /**
+     * Rechazada, la solicitud deja de consumir días, pero sus días siguen
+     * ligados al periodo: borrarlo por no tener días tomados tronaba la llave.
+     */
+    public function test_a_rejected_request_in_a_future_period_keeps_that_period(): void
+    {
+        $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar', 'vacaciones.autorizar');
+        $employee = $this->employee(yearsAgo: 2);
+
+        $id = $this->postJson("/api/employees/{$employee->id}/vacation-requests", [
+            'starts_on' => '2028-04-03', 'ends_on' => '2028-04-07',
+        ])->assertCreated()->json('data.id');
+
+        $this->postJson("/api/vacation-requests/{$id}/reject", ['rejection_reason' => 'Temporada alta'])
+            ->assertOk();
+
+        $this->getJson("/api/employees/{$employee->id}/vacation-balance")
+            ->assertOk()
+            ->assertJsonPath('data.available_days', 14);
+
+        $future = $employee->vacationPeriods()->where('year_number', 3)->first();
+
+        $this->assertNotNull($future);
+        $this->assertSame(0.0, $future->taken_days);
+        $this->assertSame(5, $future->requestDays()->count());
+    }
+
     public function test_a_future_request_is_limited_to_that_periods_balance(): void
     {
         $this->actingAsUserWith('vacaciones.ver', 'vacaciones.solicitar');

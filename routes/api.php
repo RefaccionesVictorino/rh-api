@@ -23,8 +23,10 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\VacationBalanceController;
 use App\Http\Controllers\VacationRequestController;
 use App\Http\Controllers\VacationRequestSheetController;
+use App\Http\Controllers\Worker\WorkerAttendanceController;
 use App\Http\Controllers\Worker\WorkerAuthController;
 use App\Http\Controllers\Worker\WorkerDeviceController;
+use App\Http\Controllers\Worker\WorkerVacationController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -47,6 +49,11 @@ Route::prefix('worker')->group(function () {
         Route::post('/logout', [WorkerAuthController::class, 'logout']);
         Route::put('/nip', [WorkerAuthController::class, 'updateNip']);
         Route::put('/device', [WorkerDeviceController::class, 'update']);
+
+        Route::get('/attendance', [WorkerAttendanceController::class, 'calendar']);
+        Route::get('/vacations', [WorkerVacationController::class, 'show']);
+        Route::post('/vacations/preview', [WorkerVacationController::class, 'preview']);
+        Route::post('/vacations/requests', [WorkerVacationController::class, 'store']);
     });
 });
 

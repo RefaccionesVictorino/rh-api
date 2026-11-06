@@ -202,6 +202,10 @@ class VacationPeriodService
      * falta). Con días, un futuro alineado se mantiene al corriente y un
      * resto de otra fecha de ingreso se conserva para revisión manual.
      *
+     * Una solicitud rechazada o cancelada no consume días, pero los suyos
+     * siguen ligados al periodo (incluso con borrado lógico): ese periodo se
+     * conserva para no romper la llave ni perder el historial.
+     *
      * @param  Collection<int, VacationPeriod>  $existing
      */
     private function reconcilePeriodsBeyond(Collection $existing, CarbonImmutable $hireDate, int $lastYearNumber): void
@@ -209,7 +213,7 @@ class VacationPeriodService
         $existing
             ->filter(fn (VacationPeriod $period) => $period->year_number > $lastYearNumber)
             ->each(function (VacationPeriod $period) use ($hireDate): void {
-                if ($period->taken_days == 0) {
+                if ($period->taken_days == 0 && ! $period->requestDays()->withTrashed()->exists()) {
                     $period->forceDelete();
                 } elseif ($this->isAligned($period, $hireDate)) {
                     $changes = $this->realignedDates($period, $this->datesForYear($hireDate, $period->year_number));
