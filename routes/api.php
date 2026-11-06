@@ -4,6 +4,7 @@ use App\Http\Controllers\AbsenceController;
 use App\Http\Controllers\AttendanceIncidentController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\EmployeeAppAccessController;
 use App\Http\Controllers\EmployeeAttendanceController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeePhotoController;
@@ -22,6 +23,8 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\VacationBalanceController;
 use App\Http\Controllers\VacationRequestController;
 use App\Http\Controllers\VacationRequestSheetController;
+use App\Http\Controllers\Worker\WorkerAuthController;
+use App\Http\Controllers\Worker\WorkerDeviceController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
@@ -32,6 +35,19 @@ Route::prefix('self-service/vacations')->middleware('throttle:self-service')->gr
     Route::post('/lookup', [SelfServiceVacationController::class, 'show']);
     Route::post('/preview', [SelfServiceVacationController::class, 'preview']);
     Route::post('/requests', [SelfServiceVacationController::class, 'store']);
+});
+
+// App móvil del trabajador: RFC + NIP a cambio de un token de Sanctum. Sus
+// sesiones son de WorkerAccount y no entran a las rutas del panel.
+Route::prefix('worker')->group(function () {
+    Route::post('/login', [WorkerAuthController::class, 'login'])->middleware('throttle:worker-login');
+
+    Route::middleware(['auth:sanctum', 'worker'])->group(function () {
+        Route::get('/me', [WorkerAuthController::class, 'me']);
+        Route::post('/logout', [WorkerAuthController::class, 'logout']);
+        Route::put('/nip', [WorkerAuthController::class, 'updateNip']);
+        Route::put('/device', [WorkerDeviceController::class, 'update']);
+    });
 });
 
 Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
@@ -76,6 +92,14 @@ Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
         ->middleware('permission:empleados.editar');
     Route::delete('/employees/{employee}/photo', [EmployeePhotoController::class, 'destroy'])
         ->middleware('permission:empleados.editar');
+
+    // Acceso del trabajador a la app móvil: NIP temporal y sesiones.
+    Route::get('/employees/{employee}/app-access', [EmployeeAppAccessController::class, 'show'])
+        ->middleware('permission:acceso_app.ver');
+    Route::post('/employees/{employee}/app-access/nip', [EmployeeAppAccessController::class, 'issueNip'])
+        ->middleware('permission:acceso_app.administrar');
+    Route::delete('/employees/{employee}/app-access/sessions', [EmployeeAppAccessController::class, 'revokeSessions'])
+        ->middleware('permission:acceso_app.administrar');
 
     // Calendario de un empleado: días cerrados desde attendance_days, hoy al vuelo.
     Route::get('/employees/{employee}/attendance', [EmployeeAttendanceController::class, 'calendar'])
