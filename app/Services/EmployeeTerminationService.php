@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\DB;
  *
  * La baja es lógica: el expediente, sus checadas y su historial se conservan
  * para consulta y auditoría. Lo que se corta es todo lo que lo mantenía
- * operando: el turno vigente, la jefatura de áreas, el checador y, a través de
- * EnsureSystemAccess, la cuenta de acceso al sistema si tenía una.
+ * operando: el turno vigente, la jefatura de áreas, el checador, sus sesiones
+ * en la app móvil y, a través de EnsureSystemAccess, la cuenta de acceso al
+ * sistema si tenía una.
  */
 class EmployeeTerminationService
 {
@@ -53,6 +54,9 @@ class EmployeeTerminationService
                 $devices = TimeClockDevice::where('is_active', true)->get();
                 $devices->each(fn (TimeClockDevice $device) => $this->commands->deleteUser($device, $timeClockUser->pin));
             }
+
+            // El NIP se conserva: si lo reactivan, vuelve a entrar con el suyo.
+            $employee->workerAccount?->revokeSessions();
 
             $employee->update([
                 'termination_reason' => $reason,

@@ -146,6 +146,12 @@ class Employee extends Model
         return $this->hasOne(User::class);
     }
 
+    /** Acceso a la app móvil; existe desde que RH le genera su primer NIP. */
+    public function workerAccount(): HasOne
+    {
+        return $this->hasOne(WorkerAccount::class);
+    }
+
     /** Usuario con el que checa en el reloj; a lo más uno por empleado. */
     public function timeClockUser(): HasOne
     {

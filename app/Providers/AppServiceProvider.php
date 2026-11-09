@@ -43,6 +43,14 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(30)->by(strtoupper(preg_replace('/\s+/', '', (string) $request->input('pin'))));
         });
 
+        // La app llama directo desde cada teléfono, así que aquí la IP sí
+        // distingue. Los NIP fallidos se limitan aparte, en WorkerLoginRequest.
+        RateLimiter::for('worker-login', function (Request $request) {
+            $rfc = strtoupper(preg_replace('/\s+/', '', (string) $request->input('rfc')));
+
+            return Limit::perMinute(10)->by($rfc.'|'.$request->ip());
+        });
+
         // Complementa al permiso turnos.asignar: el permiso dice si el usuario
         // asigna turnos; esta regla, a quién.
         Gate::define('assign-shift', fn (User $user, Employee $employee): Response => app(OrgChartScope::class)->covers($user, $employee)
@@ -58,7 +66,8 @@ class AppServiceProvider extends ServiceProvider
             $employee = Employee::findOrFail($id);
             $user = request()->user();
 
-            if ($user !== null && ! app(OrgChartScope::class)->covers($user, $employee)) {
+            // Una sesión de la app no es User; EnsureSystemAccess la rechaza después.
+            if ($user instanceof User && ! app(OrgChartScope::class)->covers($user, $employee)) {
                 abort(403, "{$employee->full_name} no depende de ti en el organigrama.");
             }
 

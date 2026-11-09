@@ -31,6 +31,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'checador' => ['ver', 'administrar', 'extraoficial'],
         // Incidencias de asistencia (retardos, faltas) y su justificación.
         'asistencia' => ['ver', 'justificar'],
+        // App móvil del trabajador: ver su estado y sesiones, generar NIP y cerrar sesiones.
+        'acceso_app' => ['ver', 'administrar'],
     ];
 
     public function run(): void
@@ -63,6 +65,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'ausencias.ver', 'ausencias.registrar',
             'checador.ver', 'checador.administrar',
             'asistencia.ver', 'asistencia.justificar',
+            'acceso_app.ver', 'acceso_app.administrar',
         ]);
 
         // Sus asignaciones de turno se recortan a la parte del organigrama que

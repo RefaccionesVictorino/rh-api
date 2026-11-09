@@ -8,6 +8,8 @@ use App\Models\Employee;
 use App\Models\TimeClockCommand;
 use App\Models\TimeClockDevice;
 use App\Models\TimeClockUser;
+use App\Models\WorkerAccount;
+use App\Notifications\PunchRegistered;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -20,6 +22,13 @@ use Illuminate\Support\Facades\Log;
  */
 class ZkPushProtocol
 {
+    /**
+     * Solo se avisa al trabajador de checadas con esta antigüedad máxima: al
+     * reconectarse, el equipo reenvía su historial pendiente y avisar checadas
+     * viejas sería una ráfaga de notificaciones sin valor.
+     */
+    private const NOTIFY_WITHIN_MINUTES = 10;
+
     public function __construct(private readonly ZkCommandBuilder $commands) {}
 
     /**
@@ -68,9 +77,13 @@ class ZkPushProtocol
         $created = 0;
         $timezone = config('time_clock.timezone');
         $employeeIdsByPin = [];
+        $notifyAfter = Carbon::now($timezone)->subMinutes(self::NOTIFY_WITHIN_MINUTES);
 
         /** @var array<int, array{0: Carbon, 1: Carbon}> $touched Rango de fechas con checadas nuevas por empleado. */
         $touched = [];
+
+        /** @var list<AttendancePunch> $toNotify */
+        $toNotify = [];
 
         foreach ($this->lines($body) as $line) {
             $fields = explode("\t", $line);
@@ -128,6 +141,10 @@ class ZkPushProtocol
                 if ($punch->employee_id !== null) {
                     $range = $touched[$punch->employee_id] ?? [$punchedAt, $punchedAt];
                     $touched[$punch->employee_id] = [min($range[0], $punchedAt), max($range[1], $punchedAt)];
+
+                    if ($punchedAt->gte($notifyAfter)) {
+                        $toNotify[] = $punch;
+                    }
                 }
             }
         }
@@ -138,7 +155,31 @@ class ZkPushProtocol
             RecordAttendance::forEmployee($employeeId, $first->copy()->subDay(), $last);
         }
 
+        $this->notifyWorkers($toNotify);
+
         return $created;
+    }
+
+    /**
+     * Push al trabajador por cada checada recién registrada; sin cuenta en la
+     * app no hay aviso.
+     *
+     * @param  list<AttendancePunch>  $punches
+     */
+    private function notifyWorkers(array $punches): void
+    {
+        if ($punches === []) {
+            return;
+        }
+
+        $accounts = WorkerAccount::query()
+            ->whereIn('employee_id', array_unique(array_map(fn (AttendancePunch $punch) => $punch->employee_id, $punches)))
+            ->get()
+            ->keyBy('employee_id');
+
+        foreach ($punches as $punch) {
+            $accounts->get($punch->employee_id)?->notify(new PunchRegistered($punch));
+        }
     }
 
     /**
