@@ -69,7 +69,7 @@ class WorkerPushNotificationTest extends TestCase
         Notification::assertSentTo($account, VacationRequestResolved::class, function (VacationRequestResolved $notification) use ($account) {
             $message = $notification->toExpo($account);
 
-            return $notification->via($account) === [ExpoPushChannel::class]
+            return in_array(ExpoPushChannel::class, $notification->via($account), true)
                 && str_contains($message['body'], 'rechazada')
                 && str_contains($message['body'], 'Cobertura de la sucursal');
         });

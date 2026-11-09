@@ -26,6 +26,7 @@ use App\Http\Controllers\VacationRequestSheetController;
 use App\Http\Controllers\Worker\WorkerAttendanceController;
 use App\Http\Controllers\Worker\WorkerAuthController;
 use App\Http\Controllers\Worker\WorkerDeviceController;
+use App\Http\Controllers\Worker\WorkerNotificationController;
 use App\Http\Controllers\Worker\WorkerVacationController;
 use Illuminate\Support\Facades\Route;
 
@@ -49,6 +50,12 @@ Route::prefix('worker')->group(function () {
         Route::post('/logout', [WorkerAuthController::class, 'logout']);
         Route::put('/nip', [WorkerAuthController::class, 'updateNip']);
         Route::put('/device', [WorkerDeviceController::class, 'update']);
+
+        Route::get('/notifications', [WorkerNotificationController::class, 'index']);
+        Route::post('/notifications/read-all', [WorkerNotificationController::class, 'markAllAsRead']);
+        Route::post('/notifications/{notification}/read', [WorkerNotificationController::class, 'markAsRead']);
+        Route::delete('/notifications', [WorkerNotificationController::class, 'destroyAll']);
+        Route::delete('/notifications/{notification}', [WorkerNotificationController::class, 'destroy']);
 
         Route::get('/attendance', [WorkerAttendanceController::class, 'calendar']);
         Route::get('/vacations', [WorkerVacationController::class, 'show']);

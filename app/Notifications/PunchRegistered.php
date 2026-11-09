@@ -10,7 +10,8 @@ use Illuminate\Notifications\Notification;
 
 /**
  * Push al teléfono del trabajador cuando se registra una checada suya, ya sea
- * en el checador o capturada a mano por RH.
+ * en el checador o capturada a mano por RH. También queda en su bandeja
+ * (canal `database`) para verla desde la app.
  */
 class PunchRegistered extends Notification implements ShouldQueue
 {
@@ -23,7 +24,7 @@ class PunchRegistered extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return [ExpoPushChannel::class];
+        return ['database', ExpoPushChannel::class];
     }
 
     /**
@@ -42,6 +43,20 @@ class PunchRegistered extends Notification implements ShouldQueue
             'priority' => 'high',
             'channelId' => 'default',
             'data' => ['url' => '/'],
+        ];
+    }
+
+    /**
+     * Misma forma que las notificaciones del panel (ver NotificationResource).
+     *
+     * @return array<string, mixed>
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        return [
+            'title' => 'Checada registrada',
+            'message' => $this->body(),
+            'url' => '/',
         ];
     }
 

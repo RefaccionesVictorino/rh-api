@@ -10,6 +10,7 @@ use Illuminate\Notifications\Notification;
 
 /**
  * Push al teléfono del trabajador cuando RH resuelve o cancela su solicitud.
+ * También queda en su bandeja (canal `database`) para verla desde la app.
  */
 class VacationRequestResolved extends Notification implements ShouldQueue
 {
@@ -22,7 +23,7 @@ class VacationRequestResolved extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return [ExpoPushChannel::class];
+        return ['database', ExpoPushChannel::class];
     }
 
     /**
@@ -34,17 +35,36 @@ class VacationRequestResolved extends Notification implements ShouldQueue
     public function toExpo(object $notifiable): array
     {
         return [
-            'title' => match ($this->vacationRequest->status) {
-                VacationRequest::APPROVED => 'Vacaciones aprobadas',
-                VacationRequest::CANCELLED => 'Vacaciones canceladas',
-                default => 'Solicitud de vacaciones rechazada',
-            },
+            'title' => $this->title(),
             'body' => $this->body(),
             'sound' => 'default',
             'priority' => 'high',
             'channelId' => 'default',
             'data' => ['url' => '/vacaciones'],
         ];
+    }
+
+    /**
+     * Misma forma que las notificaciones del panel (ver NotificationResource).
+     *
+     * @return array<string, mixed>
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        return [
+            'title' => $this->title(),
+            'message' => $this->body(),
+            'url' => '/vacaciones',
+        ];
+    }
+
+    private function title(): string
+    {
+        return match ($this->vacationRequest->status) {
+            VacationRequest::APPROVED => 'Vacaciones aprobadas',
+            VacationRequest::CANCELLED => 'Vacaciones canceladas',
+            default => 'Solicitud de vacaciones rechazada',
+        };
     }
 
     private function body(): string
