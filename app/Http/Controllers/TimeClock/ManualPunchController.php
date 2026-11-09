@@ -7,6 +7,7 @@ use App\Http\Requests\StoreManualPunchRequest;
 use App\Jobs\RecordAttendance;
 use App\Models\AttendancePunch;
 use App\Models\Employee;
+use App\Notifications\PunchRegistered;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -34,6 +35,9 @@ class ManualPunchController extends Controller
 
         // Un día antes por si es la salida de madrugada de un turno nocturno.
         RecordAttendance::forEmployee($employee->id, $punch->punched_at->copy()->subDay(), $punch->punched_at);
+
+        // El trabajador se entera de lo que RH registró a su nombre.
+        $employee->workerAccount?->notify(new PunchRegistered($punch));
 
         return response()->json([
             'data' => [

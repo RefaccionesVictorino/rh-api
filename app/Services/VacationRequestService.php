@@ -7,6 +7,7 @@ use App\Models\Employee;
 use App\Models\User;
 use App\Models\VacationPeriod;
 use App\Models\VacationRequest;
+use App\Notifications\VacationRequestResolved;
 use App\Notifications\VacationRequestSubmitted;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -178,7 +179,15 @@ class VacationRequestService
         // Vacaciones aprobadas con fecha pasada: esos días dejan de ser faltas.
         RecordAttendance::forEmployee($request->employee_id, $request->starts_on, $request->ends_on);
 
+        $this->notifyWorker($request);
+
         return $request;
+    }
+
+    /** Fuera de la transacción, como notifyApprovers(); sin cuenta en la app no hay aviso. */
+    private function notifyWorker(VacationRequest $request): void
+    {
+        $request->employee->workerAccount?->notify(new VacationRequestResolved($request));
     }
 
     private function changesDates(VacationRequest $request, CarbonImmutable $from, CarbonImmutable $to): bool
@@ -259,7 +268,7 @@ class VacationRequestService
     {
         $this->guardPending($request);
 
-        return DB::transaction(function () use ($request, $reviewedBy, $reason): VacationRequest {
+        $request = DB::transaction(function () use ($request, $reviewedBy, $reason): VacationRequest {
             $request->update([
                 'status' => VacationRequest::REJECTED,
                 'reviewed_by' => $reviewedBy,
@@ -271,6 +280,10 @@ class VacationRequestService
 
             return $request;
         });
+
+        $this->notifyWorker($request);
+
+        return $request;
     }
 
     public function cancel(VacationRequest $request, ?int $reviewedBy): VacationRequest
@@ -298,6 +311,8 @@ class VacationRequestService
         if ($wasApproved) {
             RecordAttendance::forEmployee($request->employee_id, $request->starts_on, $request->ends_on);
         }
+
+        $this->notifyWorker($request);
 
         return $request;
     }

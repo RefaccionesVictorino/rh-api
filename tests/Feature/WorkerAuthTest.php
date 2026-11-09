@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Department;
 use App\Models\Employee;
+use App\Models\SubDepartment;
 use App\Models\TimeClockUser;
 use App\Models\User;
 use App\Models\WorkerAccount;
@@ -101,6 +103,32 @@ class WorkerAuthTest extends TestCase
             ->getJson('/api/worker/me')
             ->assertOk()
             ->assertJsonPath('data.full_name', $account->employee->full_name);
+    }
+
+    public function test_me_returns_the_profile_of_the_worker(): void
+    {
+        $department = Department::create(['name' => 'Ventas']);
+        $subDepartment = SubDepartment::create(['department_id' => $department->id, 'name' => 'Mostrador']);
+
+        $account = $this->account();
+        $account->employee->update(['sub_department_id' => $subDepartment->id]);
+
+        $this->asWorker($this->login()->json('token'))
+            ->getJson('/api/worker/me')
+            ->assertOk()
+            ->assertJsonPath('data.rfc', self::RFC)
+            ->assertJsonPath('data.hire_date', $account->employee->hire_date->toDateString())
+            ->assertJsonPath('data.years_of_service', $account->employee->yearsOfServiceOn())
+            ->assertJsonPath('data.sub_department', 'Mostrador')
+            ->assertJsonPath('data.department', 'Ventas')
+            ->assertJsonPath('data.birthdate', self::BIRTHDATE)
+            ->assertJsonPath('data.curp', $account->employee->curp)
+            ->assertJsonPath('data.nss', $account->employee->nss)
+            ->assertJsonPath('data.personal_email', $account->employee->personal_email)
+            ->assertJsonPath('data.personal_phone', $account->employee->personal_phone)
+            ->assertJsonPath('data.address', $account->employee->address)
+            ->assertJsonPath('data.municipality', $account->employee->municipality)
+            ->assertJsonPath('data.postal_code', $account->employee->postal_code);
     }
 
     public function test_the_session_lasts_ninety_days(): void

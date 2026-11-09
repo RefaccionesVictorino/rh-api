@@ -73,6 +73,19 @@ class WorkerAuthController extends Controller
             'name' => $employee->name,
             'full_name' => $employee->full_name,
             'photo_url' => $employee->signed_photo_url,
+            'rfc' => $employee->rfc,
+            'hire_date' => $employee->hire_date?->toDateString(),
+            'years_of_service' => $employee->yearsOfServiceOn(),
+            'sub_department' => $employee->subDepartment?->name,
+            'department' => $employee->department()?->name,
+            'birthdate' => $employee->birthdate,
+            'curp' => $employee->curp,
+            'nss' => $employee->nss,
+            'personal_email' => $employee->personal_email,
+            'personal_phone' => $employee->personal_phone,
+            'address' => $employee->address,
+            'municipality' => $employee->municipality,
+            'postal_code' => $employee->postal_code,
         ];
     }
 }
