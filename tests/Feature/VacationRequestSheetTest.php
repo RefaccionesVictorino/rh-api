@@ -234,6 +234,22 @@ class VacationRequestSheetTest extends TestCase
         $this->assertStringNotContainsString('Firma del', $summary);
     }
 
+    public function test_the_sheet_shows_the_premium_once_paid(): void
+    {
+        $employee = $this->employee();
+        $request = $this->request($employee);
+        $sheets = app(VacationSheetService::class);
+
+        $blank = view('pdf.vacation-sheet', $sheets->sheet($request))->render();
+        $this->assertStringNotContainsString('$1,850.50', $blank);
+
+        $employee->vacationPeriods()->where('year_number', 2)->firstOrFail()
+            ->recordPremiumPayment(1850.5, CarbonImmutable::parse('2026-09-10'), null, 25);
+
+        $paid = view('pdf.vacation-sheet', $sheets->sheet($request->fresh()))->render();
+        $this->assertStringContainsString('$1,850.50 (25%) el 10/09/2026', $paid);
+    }
+
     public function test_the_period_summary_shows_the_premium_payment(): void
     {
         $employee = $this->employee();

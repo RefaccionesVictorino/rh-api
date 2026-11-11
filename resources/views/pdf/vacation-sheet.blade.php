@@ -1,6 +1,6 @@
 @use('App\Services\VacationSheetService', 'Format')
 
-{{-- Ficha de una solicitud. Sucursal, modalidad y prima pagada no existen en el expediente: van en blanco para llenarse a mano. --}}
+{{-- Ficha de una solicitud. Sucursal y modalidad no existen en el expediente: van en blanco para llenarse a mano, igual que la prima mientras no esté pagada. --}}
 @extends('pdf.layouts.vacation')
 
 @section('title', 'Solicitud de vacaciones')
@@ -59,7 +59,11 @@
         </td>
         <td>
           <span class="label">Prima pagada</span>
-          <span class="blank"></span>
+          @if ($period?->is_premium_paid)
+            <span class="value">{{ Format::money($period->premium_amount) }} ({{ Format::percent($period->premium_percentage) }}) el {{ Format::shortDate($period->premium_paid_on) }}</span>
+          @else
+            <span class="blank"></span>
+          @endif
         </td>
       </tr>
     </table>
