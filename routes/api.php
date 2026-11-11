@@ -3,6 +3,7 @@
 use App\Http\Controllers\AbsenceController;
 use App\Http\Controllers\AttendanceIncidentController;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeAppAccessController;
 use App\Http\Controllers\EmployeeAttendanceController;
@@ -31,6 +32,8 @@ use App\Http\Controllers\Worker\WorkerVacationController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
+Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])->middleware('throttle:password-reset');
+Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:password-reset');
 
 // Portal del trabajador: sin sesión, se identifica en cada petición con su
 // número de checador y fecha de nacimiento (ver IdentifyEmployeeRequest).
