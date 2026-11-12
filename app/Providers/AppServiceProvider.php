@@ -37,6 +37,14 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by($email.'|'.$request->ip());
         });
 
+        // Mismo criterio que el login. Además, el broker de Laravel no genera
+        // más de un enlace por minuto para la misma cuenta.
+        RateLimiter::for('password-reset', function (Request $request) {
+            $email = strtolower(trim((string) $request->input('email')));
+
+            return Limit::perMinute(5)->by($email.'|'.$request->ip());
+        });
+
         // Por número de checador y no por IP, por la misma razón que el login.
         // Los intentos fallidos se limitan aparte, en IdentifyEmployeeRequest.
         RateLimiter::for('self-service', function (Request $request) {
