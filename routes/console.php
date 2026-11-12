@@ -14,3 +14,7 @@ Schedule::command('attendance:close')
     ->dailyAt('05:00')
     ->timezone(config('time_clock.timezone'))
     ->withoutOverlapping();
+
+Schedule::command('attendance:notify-missing')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping();
