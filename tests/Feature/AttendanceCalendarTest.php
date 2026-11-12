@@ -11,13 +11,10 @@ use App\Models\VacationRequest;
 use App\Services\AttendanceCalendarService;
 use App\Services\ExpectedSchedule;
 use Carbon\CarbonImmutable;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class AttendanceCalendarTest extends TestCase
 {
-    use RefreshDatabase;
-
     /** Jueves y viernes de una semana pasada, para que el día ya esté evaluado. */
     private const THURSDAY = '2026-09-10';
 

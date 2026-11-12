@@ -7,15 +7,12 @@ use App\Models\HolidayRule;
 use App\Models\User;
 use App\Services\HolidayCalendar;
 use Carbon\CarbonImmutable;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class HolidayRuleTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function actingAsUserWith(string ...$permissions): User
     {
         foreach ($permissions as $permission) {

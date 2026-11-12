@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Notifications\ResetPasswordNotification;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -12,8 +11,6 @@ use Tests\TestCase;
 
 class PasswordResetTest extends TestCase
 {
-    use RefreshDatabase;
-
     private const NEW_PASSWORD = 'nuevaClave123';
 
     private function resetPayload(User $user, array $overrides = []): array

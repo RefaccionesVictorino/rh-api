@@ -6,7 +6,6 @@ use App\Models\Department;
 use App\Models\Employee;
 use App\Models\SubDepartment;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -14,8 +13,6 @@ use Tests\TestCase;
 
 class UserTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

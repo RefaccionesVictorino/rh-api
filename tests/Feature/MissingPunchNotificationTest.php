@@ -9,15 +9,12 @@ use App\Models\TimeClockDevice;
 use App\Models\WorkerAccount;
 use App\Models\WorkerDevice;
 use App\Notifications\PunchMissing;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class MissingPunchNotificationTest extends TestCase
 {
-    use RefreshDatabase;
-
     /** Jueves. */
     private const DATE = '2026-09-10';
 

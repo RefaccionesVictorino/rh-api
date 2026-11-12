@@ -11,7 +11,6 @@ use App\Models\TimeClockUser;
 use App\Models\User;
 use App\Models\WorkerAccount;
 use App\Services\WorkerAccessService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
@@ -20,8 +19,6 @@ use Tests\TestCase;
 
 class EmployeeTerminationTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function actingAsUserWith(string ...$permissions): User
     {
         foreach ($permissions as $permission) {

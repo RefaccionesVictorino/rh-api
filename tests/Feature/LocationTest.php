@@ -7,15 +7,12 @@ use App\Models\Employee;
 use App\Models\Location;
 use App\Models\TimeClockDevice;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class LocationTest extends TestCase
 {
-    use RefreshDatabase;
-
     private const SN = 'NYU7253800622';
 
     protected function setUp(): void

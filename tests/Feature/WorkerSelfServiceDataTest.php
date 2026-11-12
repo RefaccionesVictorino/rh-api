@@ -10,14 +10,11 @@ use App\Models\User;
 use App\Models\VacationRequest;
 use App\Models\WorkerAccount;
 use Database\Seeders\VacationEntitlementSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class WorkerSelfServiceDataTest extends TestCase
 {
-    use RefreshDatabase;
-
     private const RFC = 'GOMJ900512AB1';
 
     private const BIRTHDATE = '1990-05-12';

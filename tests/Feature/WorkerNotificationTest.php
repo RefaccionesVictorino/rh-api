@@ -7,7 +7,6 @@ use App\Models\TimeClockUser;
 use App\Models\VacationRequest;
 use App\Models\WorkerAccount;
 use App\Services\VacationRequestService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -15,8 +14,6 @@ use Tests\TestCase;
 
 class WorkerNotificationTest extends TestCase
 {
-    use RefreshDatabase;
-
     private WorkerAccount $account;
 
     protected function setUp(): void

@@ -10,15 +10,12 @@ use App\Models\User;
 use App\Models\WorkerAccount;
 use App\Models\WorkerDevice;
 use App\Services\EmployeeTerminationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class WorkerAuthTest extends TestCase
 {
-    use RefreshDatabase;
-
     /** En producción el PIN del checador es el RFC. */
     private const RFC = 'GOMJ900512AB1';
 
