@@ -85,6 +85,17 @@ class WorkerAccount extends Authenticatable
     }
 
     /**
+     * Borra la cuenta con su NIP, sesiones y teléfonos: el trabajador deja de
+     * existir para la app. Los tokens no tienen llave foránea, de ahí que se
+     * borren aparte.
+     */
+    public function revokeAccess(): void
+    {
+        $this->revokeSessions();
+        $this->delete();
+    }
+
+    /**
      * Destinos para un futuro canal de notificaciones push con Expo.
      *
      * @return list<string>

@@ -9,6 +9,8 @@ use App\Models\SubDepartment;
 use App\Models\TimeClockDevice;
 use App\Models\TimeClockUser;
 use App\Models\User;
+use App\Models\WorkerAccount;
+use App\Services\WorkerAccessService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
@@ -93,6 +95,31 @@ class EmployeeTerminationTest extends TestCase
         $command = $active->commands()->where('type', 'user_delete')->sole();
         $this->assertSame("DATA DELETE USERINFO PIN={$employee->rfc}", $command->command);
         $this->assertSame(0, $inactive->commands()->count());
+    }
+
+    public function test_it_deletes_the_worker_app_account_with_its_sessions(): void
+    {
+        $this->actingAsHr();
+
+        $employee = $this->employeeWithTimeClockUser();
+        $account = WorkerAccount::create([
+            'employee_id' => $employee->id,
+            'nip' => '482915',
+            'activated_at' => now(),
+        ]);
+        app(WorkerAccessService::class)->startSession($account, [
+            'installation_id' => 'install-1',
+            'platform' => 'android',
+        ]);
+
+        $this->terminate($employee)->assertOk();
+
+        $this->assertDatabaseMissing('worker_accounts', ['employee_id' => $employee->id]);
+        $this->assertDatabaseMissing('worker_devices', ['worker_account_id' => $account->id]);
+        $this->assertDatabaseMissing('personal_access_tokens', [
+            'tokenable_type' => WorkerAccount::class,
+            'tokenable_id' => $account->id,
+        ]);
     }
 
     public function test_it_requires_a_reason(): void
@@ -211,7 +238,7 @@ class EmployeeTerminationTest extends TestCase
         $this->postJson("/api/employees/{$employee->id}/restore")
             ->assertOk()
             ->assertJsonPath('data.id', $employee->id)
-            ->assertJsonPath('message', 'Trabajador reactivado y enviado a 1 terminal(es). Asígnale un turno y vuelve a enrolar su rostro en el equipo.');
+            ->assertJsonPath('message', 'Trabajador reactivado y enviado a 1 terminal(es). Asígnale un turno, vuelve a enrolar su rostro en el equipo y, si usa la app móvil, genérale un NIP nuevo.');
 
         $this->assertNotSoftDeleted($employee);
         $this->assertDatabaseHas('employees', [
