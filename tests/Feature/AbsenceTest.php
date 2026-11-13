@@ -10,7 +10,6 @@ use App\Models\User;
 use App\Models\VacationRequest;
 use App\Services\AttendanceCalendarService;
 use Carbon\CarbonImmutable;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
@@ -19,8 +18,6 @@ use Tests\TestCase;
 
 class AbsenceTest extends TestCase
 {
-    use RefreshDatabase;
-
     private const LOCATION = 'https://cdn.example.net/empleados/1/ausencias/abc-certificado.pdf';
 
     protected function setUp(): void

@@ -12,7 +12,6 @@ use App\Models\TimeClockCommand;
 use App\Models\TimeClockDevice;
 use App\Models\TimeClockUser;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
@@ -20,8 +19,6 @@ use Tests\TestCase;
 
 class TimeClockTest extends TestCase
 {
-    use RefreshDatabase;
-
     private const SN = 'NYU7253800622';
 
     protected function setUp(): void

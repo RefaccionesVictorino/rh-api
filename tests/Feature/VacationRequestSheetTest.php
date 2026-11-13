@@ -14,15 +14,12 @@ use App\Services\VacationSheetService;
 use Barryvdh\Snappy\Facades\SnappyPdf;
 use Carbon\CarbonImmutable;
 use Database\Seeders\VacationEntitlementSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class VacationRequestSheetTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

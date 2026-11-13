@@ -4,15 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Holiday;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class HolidayTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function actingAsUserWith(string ...$permissions): User
     {
         foreach ($permissions as $permission) {

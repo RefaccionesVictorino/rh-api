@@ -12,7 +12,6 @@ use App\Notifications\AttendanceDayClosed;
 use App\Services\AttendanceCalendarService;
 use App\Services\AttendanceRecorder;
 use Carbon\CarbonImmutable;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
@@ -20,8 +19,6 @@ use Tests\TestCase;
 
 class AttendanceDayTest extends TestCase
 {
-    use RefreshDatabase;
-
     /** Jueves y viernes; "hoy" se fija al sábado siguiente. */
     private const THURSDAY = '2026-09-10';
 

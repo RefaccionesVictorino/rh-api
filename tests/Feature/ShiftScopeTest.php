@@ -7,7 +7,6 @@ use App\Models\Employee;
 use App\Models\Shift;
 use App\Models\SubDepartment;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -24,8 +23,6 @@ use Tests\TestCase;
  */
 class ShiftScopeTest extends TestCase
 {
-    use RefreshDatabase;
-
     /** @var array<string, Employee> */
     private array $people = [];
 

@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Employee;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
@@ -13,8 +12,6 @@ use Tests\TestCase;
 
 class EmployeePhotoTest extends TestCase
 {
-    use RefreshDatabase;
-
     private const LOCATION = 'https://cdn.example.net/empleados/1/abc-foto.jpg';
 
     protected function setUp(): void

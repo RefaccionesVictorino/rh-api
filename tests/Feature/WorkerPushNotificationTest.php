@@ -13,7 +13,6 @@ use App\Notifications\Channels\ExpoPushChannel;
 use App\Notifications\PunchRegistered;
 use App\Notifications\VacationRequestResolved;
 use App\Services\VacationRequestService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
@@ -24,8 +23,6 @@ use Tests\TestCase;
 
 class WorkerPushNotificationTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function pendingRequest(): VacationRequest
     {
         $employee = Employee::factory()->create();

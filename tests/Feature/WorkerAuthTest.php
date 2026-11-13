@@ -10,15 +10,12 @@ use App\Models\User;
 use App\Models\WorkerAccount;
 use App\Models\WorkerDevice;
 use App\Services\EmployeeTerminationService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class WorkerAuthTest extends TestCase
 {
-    use RefreshDatabase;
-
     /** En producción el PIN del checador es el RFC. */
     private const RFC = 'GOMJ900512AB1';
 
@@ -347,16 +344,17 @@ class WorkerAuthTest extends TestCase
         $this->asWorker($token)->getJson('/api/worker/me')->assertUnauthorized();
     }
 
-    public function test_terminating_the_worker_closes_the_app_sessions_and_keeps_the_nip(): void
+    public function test_terminating_the_worker_deletes_the_app_account_and_its_sessions(): void
     {
         $account = $this->account();
-        $this->login()->assertOk();
+        $token = $this->login()->json('token');
 
         app(EmployeeTerminationService::class)->terminate($account->employee, 'Renuncia voluntaria', null);
 
         $this->assertSame(0, $account->tokens()->count());
         $this->assertSame(0, $account->devices()->count());
-        $this->assertModelExists($account);
+        $this->assertModelMissing($account);
+        $this->asWorker($token)->getJson('/api/worker/me')->assertUnauthorized();
     }
 
     public function test_a_worker_session_cannot_reach_the_panel(): void

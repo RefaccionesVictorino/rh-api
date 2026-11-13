@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\DB;
  *
  * La baja es lógica: el expediente, sus checadas y su historial se conservan
  * para consulta y auditoría. Lo que se corta es todo lo que lo mantenía
- * operando: el turno vigente, la jefatura de áreas, el checador, sus sesiones
- * en la app móvil y, a través de EnsureSystemAccess, la cuenta de acceso al
+ * operando: el turno vigente, la jefatura de áreas, el checador, su cuenta en
+ * la app móvil y, a través de EnsureSystemAccess, la cuenta de acceso al
  * sistema si tenía una.
  */
 class EmployeeTerminationService
@@ -55,8 +55,8 @@ class EmployeeTerminationService
                 $devices->each(fn (TimeClockDevice $device) => $this->commands->deleteUser($device, $timeClockUser->pin));
             }
 
-            // El NIP se conserva: si lo reactivan, vuelve a entrar con el suyo.
-            $employee->workerAccount?->revokeSessions();
+            // Se borra entera, NIP incluido: si lo reactivan, RH le genera uno nuevo.
+            $employee->workerAccount?->revokeAccess();
 
             $employee->update([
                 'termination_reason' => $reason,
@@ -101,11 +101,11 @@ class EmployeeTerminationService
             : "Trabajador dado de baja y retirado de {$devices} terminal(es).";
     }
 
-    /** La baja borró su rostro de los equipos; hay que enrolarlo de nuevo. */
+    /** La baja borró su rostro de los equipos y su cuenta de la app; ambos se rehacen. */
     public function restoreMessage(int $devices): string
     {
         return $devices === 0
-            ? 'Trabajador reactivado. No hay terminales activas, así que su alta en el checador quedó pendiente de enviar. Asígnale un turno.'
-            : "Trabajador reactivado y enviado a {$devices} terminal(es). Asígnale un turno y vuelve a enrolar su rostro en el equipo.";
+            ? 'Trabajador reactivado. No hay terminales activas, así que su alta en el checador quedó pendiente de enviar. Asígnale un turno y, si usa la app móvil, genérale un NIP nuevo.'
+            : "Trabajador reactivado y enviado a {$devices} terminal(es). Asígnale un turno, vuelve a enrolar su rostro en el equipo y, si usa la app móvil, genérale un NIP nuevo.";
     }
 }

@@ -8,13 +8,10 @@ use App\Models\TimeClockUser;
 use App\Models\VacationRequest;
 use Carbon\CarbonImmutable;
 use Database\Seeders\VacationEntitlementSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class SelfServiceVacationTest extends TestCase
 {
-    use RefreshDatabase;
-
     /** En producción el PIN del checador es el RFC. */
     private const PIN = 'GOMJ900512AB1';
 

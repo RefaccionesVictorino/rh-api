@@ -7,13 +7,10 @@ use App\Models\Employee;
 use App\Models\TimeClockDevice;
 use App\Models\TimeClockUser;
 use Database\Seeders\EmployeesTableSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class EmployeesTableSeederTest extends TestCase
 {
-    use RefreshDatabase;
-
     /** @return list<array{pin: string, name: string}> */
     private function catalog(): array
     {

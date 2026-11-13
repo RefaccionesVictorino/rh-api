@@ -9,7 +9,6 @@ use App\Models\VacationRequest;
 use App\Notifications\VacationRequestSubmitted;
 use Carbon\CarbonImmutable;
 use Database\Seeders\VacationEntitlementSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
@@ -18,8 +17,6 @@ use Tests\TestCase;
 
 class NotificationTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();

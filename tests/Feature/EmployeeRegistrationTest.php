@@ -8,7 +8,6 @@ use App\Models\SubDepartment;
 use App\Models\TimeClockDevice;
 use App\Models\TimeClockUser;
 use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -19,8 +18,6 @@ use Tests\TestCase;
  */
 class EmployeeRegistrationTest extends TestCase
 {
-    use RefreshDatabase;
-
     private function actingAsUserWith(string ...$permissions): User
     {
         foreach ($permissions as $permission) {
