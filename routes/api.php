@@ -277,6 +277,7 @@ Route::middleware(['auth:sanctum', 'system.access'])->group(function () {
             // Responde 200 y no 202: es el único de este grupo que no encola.
             Route::put('/devices/{device}', [TimeClockController::class, 'updateDevice']);
             Route::post('/devices/{device}/execute', [TimeClockController::class, 'execute']);
+            Route::get('/users/lookup', [TimeClockController::class, 'lookupUser']);
             Route::post('/users', [TimeClockController::class, 'storeUser']);
             Route::delete('/users/{user}', [TimeClockController::class, 'destroyUser']);
         });

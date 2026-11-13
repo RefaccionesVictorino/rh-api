@@ -235,6 +235,32 @@ class TimeClockController extends Controller
     }
 
     /**
+     * Usuario del checador con un PIN dado, con sus checadas acumuladas.
+     *
+     * Lo consulta el alta de trabajador para avisar a RH, antes de guardar, que
+     * el RFC ya fue enrolado en la terminal y a quién pertenece. `data` es nulo
+     * si el PIN está libre.
+     */
+    public function lookupUser(Request $request): JsonResponse
+    {
+        $request->validate(['pin' => ['required', 'string', 'max:20']]);
+
+        $pin = strtoupper(preg_replace('/\s+/', '', $request->string('pin')->toString()));
+
+        $user = TimeClockUser::with('employee:id,name,last_name,second_last_name')
+            ->where('pin', $pin)
+            ->first();
+
+        return response()->json([
+            'data' => $user === null ? null : [
+                ...$this->userPayload($user),
+                'punches' => $user->punches()->count(),
+                'first_punch_at' => $user->punches()->min('punched_at'),
+            ],
+        ]);
+    }
+
+    /**
      * Alta de usuario: se guarda local y se encola hacia los equipos activos.
      *
      * El rostro no se puede enviar desde aquí; el empleado debe enrolarlo

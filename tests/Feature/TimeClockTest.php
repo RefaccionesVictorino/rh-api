@@ -300,6 +300,33 @@ class TimeClockTest extends TestCase
         ])->assertStatus(202);
     }
 
+    public function test_looks_up_a_pin_with_its_owner_and_punches(): void
+    {
+        $this->actingAsUserWith('checador.administrar');
+
+        $device = TimeClockDevice::create(['serial_number' => self::SN]);
+        TimeClockUser::create(['pin' => 'VASL950721QG6', 'name' => 'Enrolado en pantalla']);
+        AttendancePunch::create([
+            'device_id' => $device->id, 'pin' => 'VASL950721QG6',
+            'punched_at' => '2026-09-14 09:00:00', 'punch_type' => AttendancePunch::TYPE_IN,
+        ]);
+
+        // El PIN se normaliza igual que el RFC en el alta.
+        $this->getJson('/api/time-clock/users/lookup?pin= vasl950721qg6')
+            ->assertOk()
+            ->assertJsonPath('data.pin', 'VASL950721QG6')
+            ->assertJsonPath('data.name', 'Enrolado en pantalla')
+            ->assertJsonPath('data.employee_id', null)
+            ->assertJsonPath('data.punches', 1)
+            ->assertJsonPath('data.first_punch_at', '2026-09-14 09:00:00');
+
+        $this->getJson('/api/time-clock/users/lookup?pin=LIBRE')
+            ->assertOk()
+            ->assertJsonPath('data', null);
+
+        $this->getJson('/api/time-clock/users/lookup')->assertUnprocessable();
+    }
+
     public function test_executes_named_commands_only(): void
     {
         $this->actingAsUserWith('checador.administrar');
