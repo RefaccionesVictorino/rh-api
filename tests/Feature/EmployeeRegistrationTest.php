@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\RecordAttendance;
+use App\Models\AttendancePunch;
 use App\Models\Department;
 use App\Models\Employee;
 use App\Models\SubDepartment;
 use App\Models\TimeClockDevice;
 use App\Models\TimeClockUser;
 use App\Models\User;
+use Illuminate\Support\Facades\Bus;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -150,16 +153,86 @@ class EmployeeRegistrationTest extends TestCase
         ]);
     }
 
-    public function test_it_rejects_an_rfc_already_used_as_a_time_clock_pin(): void
+    public function test_it_adopts_a_time_clock_user_enrolled_on_the_device_before_hr_captured_them(): void
     {
         $this->actingAsHr();
 
-        // Usuario enrolado en el equipo que RH aún no había ligado a nadie.
+        Bus::fake([RecordAttendance::class]);
+
+        $device = TimeClockDevice::create(['serial_number' => 'ACTIVE-1', 'is_active' => true]);
+        $orphan = TimeClockUser::create(['pin' => 'VALS900101AB1', 'name' => 'Enrolado en pantalla']);
+
+        // Checadas que llegaron sin expediente al que pertenecer.
+        foreach (['2026-08-20 08:02:00', '2026-08-21 08:00:00'] as $punchedAt) {
+            AttendancePunch::create([
+                'device_id' => $device->id, 'pin' => 'VALS900101AB1',
+                'punched_at' => $punchedAt, 'punch_type' => AttendancePunch::TYPE_IN,
+            ]);
+        }
+        $foreign = AttendancePunch::create([
+            'device_id' => $device->id, 'pin' => 'OTRO900101XX1',
+            'punched_at' => '2026-08-20 08:05:00', 'punch_type' => AttendancePunch::TYPE_IN,
+        ]);
+
+        $this->postJson('/api/employees', $this->payload())
+            ->assertCreated()
+            ->assertJsonPath('data.time_clock_pin', 'VALS900101AB1')
+            ->assertJsonPath(
+                'message',
+                'Trabajador creado y ligado a su usuario del checador, que ya estaba enrolado en el equipo. '
+                .'Se le asociaron 2 checada(s) anteriores.',
+            );
+
+        $employee = Employee::firstWhere('rfc', 'VALS900101AB1');
+
+        $this->assertSame(1, TimeClockUser::where('pin', 'VALS900101AB1')->count());
+        $this->assertDatabaseHas('time_clock_users', [
+            'id' => $orphan->id,
+            'name' => 'Sergio Vargas Luna',
+            'employee_id' => $employee->id,
+        ]);
+
+        $this->assertSame(2, AttendancePunch::where('employee_id', $employee->id)->count());
+        $this->assertNull($foreign->fresh()->employee_id);
+
+        // La asistencia de esos días se vuelve a evaluar, un día antes por el
+        // posible turno nocturno.
+        Bus::assertDispatched(RecordAttendance::class, fn (RecordAttendance $job) => $job->employeeIds === [$employee->id]
+            && $job->from === '2026-08-19'
+            && $job->to === '2026-08-21');
+
+        // El nombre capturado en RH reemplaza al tecleado en la terminal.
+        $command = $device->commands()->where('type', 'user_upsert')->sole();
+        $this->assertStringContainsString('Name=Sergio Vargas Luna', $command->command);
+    }
+
+    public function test_adopting_a_user_without_punches_does_not_recompute_attendance(): void
+    {
+        $this->actingAsHr();
+        Bus::fake([RecordAttendance::class]);
+
         TimeClockUser::create(['pin' => 'VALS900101AB1', 'name' => 'Enrolado en pantalla']);
 
         $this->postJson('/api/employees', $this->payload())
+            ->assertCreated()
+            ->assertJsonPath(
+                'message',
+                'Trabajador creado y ligado a su usuario del checador, que ya estaba enrolado en el equipo.',
+            );
+
+        Bus::assertNotDispatched(RecordAttendance::class);
+    }
+
+    public function test_it_rejects_an_rfc_that_is_the_pin_of_another_employee(): void
+    {
+        $this->actingAsHr();
+
+        $other = Employee::factory()->create(['rfc' => 'OTRO900101XX1']);
+        TimeClockUser::create(['pin' => 'VALS900101AB1', 'name' => 'Otro', 'employee_id' => $other->id]);
+
+        $this->postJson('/api/employees', $this->payload())
             ->assertUnprocessable()
-            ->assertJsonValidationErrors('rfc');
+            ->assertJsonValidationErrors(['rfc' => 'Ese RFC ya es el PIN de otro trabajador en el checador.']);
 
         $this->assertDatabaseMissing('employees', ['curp' => 'VALS900101HJCRNR07']);
     }

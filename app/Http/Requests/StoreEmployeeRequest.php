@@ -3,6 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\ValidatesEmergencyContacts;
+use App\Models\TimeClockUser;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -55,9 +57,21 @@ class StoreEmployeeRequest extends FormRequest
                 'required', 'string',
                 'regex:/^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/',
                 Rule::unique('employees', 'rfc')->whereNull('deleted_at'),
-                // El RFC se usa como PIN del checador: si ya existe un usuario
-                // con ese PIN el alta fallaría a medias, así que se detiene aquí.
-                Rule::unique('time_clock_users', 'pin')->whereNull('deleted_at'),
+                /*
+                 * El RFC es el PIN del checador. Un usuario con ese PIN que ya
+                 * pertenece a otro expediente bloquea el alta; uno sin ligar
+                 * (enrolado en la terminal antes de capturarlo en RH) se adopta
+                 * al registrar, así que aquí no se rechaza.
+                 */
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    $taken = TimeClockUser::where('pin', $value)
+                        ->whereNotNull('employee_id')
+                        ->exists();
+
+                    if ($taken) {
+                        $fail('Ese RFC ya es el PIN de otro trabajador en el checador.');
+                    }
+                },
             ],
             'curp' => [
                 'required', 'string', 'size:18',

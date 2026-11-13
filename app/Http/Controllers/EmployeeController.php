@@ -57,13 +57,15 @@ class EmployeeController extends Controller
         StoreEmployeeRequest $request,
         EmployeeRegistrationService $registration,
     ): JsonResponse {
-        ['employee' => $employee, 'devices' => $devices] = $registration->register(
-            $request->payload(),
-            $request->emergencyContacts(),
-        );
+        [
+            'employee' => $employee,
+            'devices' => $devices,
+            'adopted' => $adopted,
+            'punches' => $punches,
+        ] = $registration->register($request->payload(), $request->emergencyContacts());
 
         return EmployeeResource::make($employee->load(self::DETAIL_RELATIONS))
-            ->additional(['message' => $registration->syncMessage($devices)])
+            ->additional(['message' => $registration->syncMessage($devices, $adopted, $punches)])
             ->response()
             ->setStatusCode(201);
     }
